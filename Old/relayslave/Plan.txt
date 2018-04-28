@@ -1,0 +1,22 @@
+Plan:
+
+Relay slave has three outputs connected to ULN2003 driving relays controlling AC. 
+
+In response to RF command, provide the following behavior for each relay:
+*Turn on or off
+*Turn on, and then turn off after a delay
+*Turn off, and then turn back on after a delay
+*Wait, and then turn on after a delay
+*Wait, and then turn off after a delay
+*Wait, and then turn on for specified period of time, then turn back off.
+*Wait, and then turn off for specified period of time, then turn back on.
+
+In response to RF command, provide the following behavior for a short attached WS2812 LED strip:
+*Set pixels, with and without immediate latch (as already implemented)
+*Load presets
+
+In response to RF command
+* Set default power on state for relays
+* Set max time on for each relay
+
+

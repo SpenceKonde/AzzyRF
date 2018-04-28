@@ -1,0 +1,10 @@
+Command: 0xF6 - 
+
+
+Byte 0 - Addr/size, long packet
+Byte 1 - Command - 0xF6
+Byte 2 - Param   - Start at
+Byte 3 - ExtParam  Low bits - number of LED to set, high bits: | TBD | TBD | TBD | LatchNow
+Byte 4-30 - LED values, up to 9. 
+Byte 31 - Checksum
+

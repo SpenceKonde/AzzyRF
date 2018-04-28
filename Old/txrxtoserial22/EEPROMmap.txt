@@ -1,0 +1,18 @@
+
+0x00 - 0x20: Basic config
+0x00 - 0x04: System-wide settings, version #, etc. 
+0x00:
+7: 1=ignore eeprom configuration, 0=load config from eeprom
+6: 1=Clocked externally or OSCCAL OK; 0=load OSCCAL 
+5~0: Address
+0x01 - OSCCAL tuning value
+
+0x02 - 0x1F - reserved
+
+0x20 - 0x40: RF tx/rx time parameters
+
+0x40 - 0x60: Auto-ACK table (if referred to from 
+
+
+ACK Map - For each of the 256 possible commands, need to mark which ones will generate an ACK response, and which ones won't, since we don't want things going to multiple receivers getting ACK'ed, else we'll just have a storm of ACK's flying around and nobody will be able to hear any of them over all the shouting. 
+

@@ -1,0 +1,8 @@
+Pin 0: 2k to Vcc, 2k to ground through lower door switch, to ground via light beam switch. 
+Pin 1: INPUT_PULLUP, to ground through upper door switch
+Pin 2,3,4,5,6 - LEDs
+Pin 7 TX
+Pin 8,9 Serial
+Pin 10 RX
+
+After setup finishes, a minute or so later, unset RXEN. 

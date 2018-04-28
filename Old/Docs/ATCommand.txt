@@ -1,0 +1,47 @@
+Protocol:
+
+Send specified AT command, followed by any combination of \r and \n characters. If command has parameter(s), the board will echo a ">" character. Once this is received, you may send the expected number of bytes, after which the command will be immediately processed (no CRLF is required)
+
+If at any point in the process, no character is received by the board for 10 seconds, a CRLF sequence will be sent and the board's command state will be reset. 
+
+Commands:
+
+AT+SEND
+Data: 4 bytes
+Send a standard AzzyRF packet, bytes supplied are the data. The first byte is the destination address, and the high bits of the fourth byte are ignored (as that space is used for the checksum). 
+AT+SENDM
+Data: 7 bytes
+Send a medium (7 byte) AzzyRF packet, bytes supplied are the data. The first byte is the destination address. 
+AT+SENDL
+Data: 15 bytes
+Send a long (16 byte) AzzyRF packet, bytes supplied are the data. The first byte is the destination address.
+AT+SENDE
+Data: 31 bytes
+Send an extended (32 byte) AzzyRF packet, bytes supplied are the data. The first byte is the destination address.
+
+All AT+SEND* commands will echo "TX OK" followed by CRLF after sending the data. 
+
+AT+HEX?
+Responds with hex in/out settings, followed by CRLF sequence:
+"01" = hex output, binary input
+"03" = hex output and input
+(char code 2) = hex input, binary output
+(char code 0) = binary output and input
+
+
+  } else if (strcmp (serBuffer, "AT+CONF") == 0) {
+    SerRXmax = 26;
+    rxing = 2;
+  } else if (strcmp (serBuffer, "AT+ADR?") == 0) {
+    SerialCmd.println(MyAddress);
+  } else if (strcmp (serBuffer, "AT+ADR") == 0) {
+    SerRXmax = 1;
+    rxing = 2;
+  } else {
+    SerialCmd.println(F("ERROR"));
+    SerialCmd.println(serBuffer);
+    resetSer();
+  }
+  if (rxing == 2) {
+    SerialCmd.print(F(">"));
+  }

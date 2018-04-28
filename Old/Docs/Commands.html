@@ -1,0 +1,443 @@
+<html>
+<head>
+  <title>AzzyRF</title>
+<link rel="stylesheet" type="text/css" href="rfdocs.css">
+ </head>
+ <body>
+
+<div class="section">
+<h2>Basics</h2>
+
+Packets are either normal (4 byte), or long (8, 16, or 32 byte). First byte is destination address, second byte identifies the command. Checksum is last byte for long packets, last 4 bits for normal packets. All devices have an address specified (either with #define or stored in EEPROM); If this is specified as 0, the device should process all packets (though it may choose not to react to some of them). Likewise, packets with destination address of 0 may be processed by any device. 
+
+
+<table><tr><th>Size</th><th>Raw size</th><th>Payload</th></tr>
+<tr><td>Normal</td><td>4 bytes</td><td>12 bits</td></tr>
+<tr><td>Normal</td><td>8 bytes</td><td>5 bytes</td></tr>
+<tr><td>Normal</td><td>16 bytes</td><td>13 bytes</td></tr>
+<tr><td>Normal</td><td>32 bytes</td><td>29 bytes</td></tr>
+</table>
+
+<h2> Timing </h2>
+
+Several timing schemes have been utilized, varying in the length of each given bit. 
+
+<table><tr><th>Version</th><th>Sync</th><th>One</th><th>Zero</th><th>Low</th><th>Train</th><th>Time/rep 4 byte packet*</th></tr>
+<tr><td>v1</td><td>2ms</td><td>1.1ms</td><td>0.6ms</td><td>0.65ms</td><td>0.4ms x 30</td><td>62.5ms</td></tr>
+<tr><td>v2</td><td>2ms</td><td>0.5ms</td><td>0.21ms</td><td>0.35ms</td><td>0.2ms x 30</td><td>30.9ms</td></tr>
+<tr><td>v2.1</td><td>2ms</td><td>0.55ms</td><td>0.3ms</td><td>0.42ms</td><td>0.2ms x 30</td><td>37.04ms</td></tr>
+<tr><td>v2.2</td><td>2+2ms</td><td>0.5ms</td><td>0.3ms</td><td>0.4ms</td><td>0.2ms x 30</td><td>37.6ms</td></tr>
+</table>
+<ul>
+<li> Version 1 represents the first attempt, and no attention was given to throughput, just ease of implementation. </li>
+<li> Version 2 attempted to improve throughput, however, it was found to perform inadequately with certain bit patterns, particularly repeated zeros.</li>
+<li> Version 2.1 whitens the bit pattern significantly, which improves performance in repeated 1's and 0's. </li>
+<li> Version 2.2 whitens the bit pattern a bit more, and adds a 2ms HIGH pulse prior to the 2ms LOW sync pulse </li>
+
+
+*assuming even distribution of ones and zeros, single repetition, including training burst
+
+<h2> Time formats </h2>
+<h3> Relative time</h3>
+
+<ul>
+<li>16-bit - 3 most significant bits specify units. Rest is value - 0-8192 ms to days</li>
+<li>12-bit - 3 most significant bits specify units. Rest is value - 0-511 ms to days</li>
+<li>8-bit - 2 most significant bits specify units. Rest is value - 0-63 s to 4-hour units (252 hrs or 10.5 days max) </li>
+</ul>
+
+<table><tr><th>Bit</th><th>Units</th></tr>
+<tr><td>0b000</td><td>Seconds</td></tr>
+<tr><td>0b001</td><td>Minutes</td></tr>
+<tr><td>0b010</td><td>1/4th hours</td></tr>
+<tr><td>0b011</td><td>4-hours</td></tr>
+<tr><td>0b100</td><td>Hour</td></tr>
+<tr><td>0b101</td><td>millisecond</td></tr>
+<tr><td>0b110</td><td>centisecond</td></tr>
+<tr><td>0b111</td><td>Day</td></tr>
+</table>
+</div>
+
+<h3> Absolute time </h3>
+
+
+<h1>Commands:</h1>
+
+<div>
+  This listing documents commands that I have designed and used. All devices do not support all commands, and typically support only the small subset that is related to the function which the device performs.
+</div>
+
+
+<div class="section">
+<h2>Sensor Commands </h2>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Read Analog Sensor</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x20</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Sensor to read</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Don't care</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command causes the slave to transmit it's current sensor readings over RF. For the PWM controller, sensor 0 is temperature, and sensor 1 is light. Either way, the 8 MSB of the value are transmitted in the first payload byte, and the 2 LSB in the second payload byte.</td></tr>
+</table>
+
+</div></div>
+
+
+<div class="section">
+<h2>Digital-Out Commands </h2>
+<p>Generic digital out commands.</p>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Digital Set</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x40</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>PWM Duty Cycle 0-255</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Channel select</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command controls an output of the slave device. The value of the extended parameter sets the channel, and Option specifies the PWM duty cycle. Note that on some outputs, PWM output may be disabled (for example, when driving relays) - in this case, values of 128 or higher are on, 127 or lower are off.
+</td></tr>
+</table>
+
+</div>
+
+<div class="commandLong">
+<table class="cmddesc">
+<tr><th colspan=2>Advanced Digital Set</th><th class="dummy"></th></tr>
+<tr><td>Type:</td><td>Medium</td><td class="dummy"></td></tr>
+<tr><td>Command:</td><td>0x41</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>4 high bit channel select, see below</td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td>See below</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This offers more advanced functionality. The 4 high bits of Option select channel, as with Digital Set (0x40). The low 4 bits set the command:
+
+<table><tr><th>Value</th><th>Command</th><th>Data[0]</th><th>Data[1]</th><th>Data[2]</th><th>Data[3]</th></tr>
+<tr><td>0x00</td><td>Delay, and then set</td><td colspan=2>Delay length</td><td>PWM duty cycle</td><td>DNC</td></tr>
+<tr><td>0x01</td><td>Set, delay, set again</td><td colspan=2>Delay length</td><td>PWM duty cycle (delay)</td><td>PWM duty cycle (now)</td></tr>
+<tr><td>0x02</td><td>Delay, pulse on for time</td><td colspan=2>Delay length</td><td colspan=2>Pulse length</td></tr>
+<tr><td>0x03</td><td>Delay, pulse off for time</td><td colspan=2>Delay length</td><td colspan=2>Pulse length</td></tr>
+<tr><td>0x04</td><td>Delay, pulse on for time, repeat</td><td colspan=2>Delay length</td><td colspan=2>Pulse length</td></tr>
+<tr><td>0x05</td><td>Delay, pulse off for time, repeat</td><td colspan=2>Delay length</td><td colspan=2>Pulse length</td></tr>
+<tr><td>0x08</td><td>Set, fade to new value </td><td>PWM duty cycle (start)</td><td colspan=2>Fade time</td><td>PWM duty cycle (end)</td></tr>
+<tr><td>0x09</td><td>Set, fade to new value, then back to start </td><td>PWM duty cycle (start)</td><td colspan=2>Fade time</td><td>PWM duty cycle (end)</td></tr>
+<tr><td>0x0A</td><td>Set, fade to new value, then back, repeating </td><td>PWM duty cycle (start)</td><td colspan=2>Fade time</td><td>PWM duty cycle (end)</td></tr>
+</table>
+
+</td></tr>
+</table>
+</div>
+
+</div>
+<div class="section">
+<h2>RGBW PWM Commands </h2>
+<span class="subtitle">Specialized PWM commands for interacting with a slave controlling 1-4 channel high power LED lighting. </span>
+
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>PWM Set, no latch</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x30</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>PWM Duty Cycle 0-255</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Channel select</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command sets the PWM duty cycle for one or more PWM channels. These settings will not be applied until a separate command 'latches' the values - this can be done with command 0x31 or 0x32. The 4-bit extended options control which PWM channel(s) this is applied to, according to the table below. For example, an extended value of 0x0F would apply to all colors, while a value of 0x05 would apply to red and blue only. 
+
+<table><tr><th>Bit</th><th>Color</th></tr>
+<tr><td>0x01</td><td>Red</td></tr>
+<tr><td>0x02</td><td>Green</td></tr>
+<tr><td>0x04</td><td>Blue</td></tr>
+<tr><td>0x08</td><td>White</td></tr></table>
+
+</td></tr>
+</table>
+</div>
+
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>PWM Set and Latch</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x31</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>PWM Duty Cycle 0-255</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Channel select</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command sets the PWM duty cycle for one or more PWM channels, and applies these settings to *all* PWM channels. If previous commands have set PWM duty cycle for other channels, and these have not been latched yet, they will be when this is received. The 4-bit extended options control which PWM channel(s) this is applied to, according to the table below. For example, an extended value of 0x0F would apply to all colors, while a value of 0x05 would apply to red and blue only. 
+
+<table><tr><th>Bit</th><th>Color</th></tr>
+<tr><td>0x01</td><td>Red</td></tr>
+<tr><td>0x02</td><td>Green</td></tr>
+<tr><td>0x04</td><td>Blue</td></tr>
+<tr><td>0x08</td><td>White</td></tr>
+
+</td></tr>
+</table></table>
+</div>
+
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>PWM Latch</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x32</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Delay (ms/16)</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Delay left-shift (bits)</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command latches the PWM duty cycles set by commands 0x30 and 0x31, after waiting for a number of milliseconds specified in Option, left-shifted by the value of Extended+4 (if Option is 0, they are latched immediately). For example, if extended is 0, and option is 100, it will wait 1.6 seconds (100 << 4). If we want an 8 hour delay (28,800 seconds), we could set Option to 220 and Extended to 13 - 220 << (13+4) = 28,835 seconds. 
+
+<p>During that waiting period, other commands can still be accepted. </p>
+
+
+
+</td></tr>
+</table>
+
+</div>
+
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Suspend</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x33</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Suspend brightness</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Channel Select</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command turns down PWM channels, without changing the stored value of the channel. They will be set to the brightness specified, or their current brightness, whichever is less. Future "latch" commands will return them to their previous brightness</p>
+
+<table><tr><th>Bit</th><th>Color</th></tr>
+<tr><td>0x01</td><td>Red</td></tr>
+<tr><td>0x02</td><td>Green</td></tr>
+<tr><td>0x04</td><td>Blue</td></tr>
+<tr><td>0x08</td><td>White</td></tr></table>
+
+</td></tr>
+</table>
+
+</div>
+
+<div class="commandLong">
+<table class="cmddesc">
+<tr><th colspan=2>Set All PWM</th><th class="dummy"></th></tr>
+<tr><td>Type:</td><td>Medium</td><td class="dummy"></td></tr>
+<tr><td>Command:</td><td>0x35</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>1=latch, 0=do not latch</td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td>PWM brightness in RGBW order</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This sets, and optionally latches, the 4 PWM channels controlling an RGBW LED. To latch, set Option to 1, otherwise, set to 0.
+</td></tr>
+</table>
+
+</div>
+
+
+</div>
+<div class="section">
+
+
+<h2>WS2812 Commands </h2>
+
+<span class="subtitle">Commands for controlling a slave device that drives WS2812 or other individually addressable LEDs</span>
+<div class="commandLong">
+<table class="cmddesc">
+<tr><th colspan=2>Set Pixel</th><th class="dummy"></th></tr>
+<tr><td>Type:</td><td>Medium, Large, Extended</td><td class="dummy"></td></tr>
+<tr><td>Command:</td><td>0x38</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Start LED</td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td>Pixel values in RGB order</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ In a the medium and large packet, this sets one or four consecutive pixels, starting at the specified start pixel. In the Extended form, up to 9 consecutive pixels can be set. In the extended form, the final byte before the checksum is the number of pixels being set (not more than 9). This does not latch the pixels.
+</td></tr>
+</table>
+
+</div>
+
+<div class="commandLong">
+<table class="cmddesc">
+<tr><th colspan=2>Set Pixel and latch</th><th class="dummy"></th></tr>
+<tr><td>Type:</td><td>Medium, Large, Extended</td><td class="dummy"></td></tr>
+<tr><td>Command:</td><td>0x39</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Start LED</td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td>Pixel values in RGB order</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ In a the medium and large packet, this sets one or four pixels, starting at the specified start pixel. In the Extended form, up to 9 consecutive pixels can be set. In the extended form, the final byte before the checksum is the number of pixels being set (not more than 9).  This does immediately latch the pixels.
+</td></tr>
+</table>
+
+</div>
+
+
+<div class="commandLong">
+<table class="cmddesc">
+<tr><th colspan=2>Addressed Set Pixel</th><th class="dummy"></th></tr>
+<tr><td>Type:</td><td>Medium, Large, Extended</td><td class="dummy"></td></tr>
+<tr><td>Command:</td><td>0x3A</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Number of pixels being set</td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td>Pixel values in RGB order, preceeded by address</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command allows you to pick and choose individual pixels to change. With this command, up to 1, 3, or 7 pixels can be set with a single command. The low 4 bits of 'Option' should contains the number of pixels being sent. If bit 5 (0x10) is set, the pixels will be latched immediately
+</td></tr>
+</table>
+
+</div>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Pixel Control</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0x3B</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>See Below</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>See Below</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command can turn off, set latch, or latch after a delay for the configured LED strip, depending on the extended parameter
+
+<table><tr><th>Ext. Param</th><th>Result</th></tr>
+<tr><td>0x01</td><td>Latch</td></tr>
+<tr><td>0x02</td><td>Clear</td></tr>
+<tr><td>0x03</td><td>Clear + Latch</td></tr>
+<tr><td>0x04</td><td>Latch after delay Delay = Option, seconds</td></tr>
+<tr><td>0x08</td><td>Latch after delay Delay = Option, minutes</td></tr>
+<tr><td>0x0C</td><td>Latch after delay Delay = Option, units of 10 minutes</td></tr>
+<tr><td>0x00</td><td>Cancel schduled latch</td></tr></table>
+
+
+</td></tr>
+</table>
+
+</div>
+
+
+</div>
+
+<div class="section">
+<h2>Event Notifications</h2>
+<span class="subtitle">This special category of messages are broadcast from a device which may not have a receiver, to notify another device of an event. These are meant for broadcast of little pieces of information - periodic sensor readings (rather than readings done in response to a request from another device), notifications of changing conditions, etc. All of these may be sent as long packets as well if more data needs to be sent.</span>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Alert Notice (master addressed)</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0xE0</td><td class="dummy"></td></tr>
+<tr><td>Address:</td><td>Master device address </td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td> 1 byte of data </td><td class="dummy"></td></tr>
+<tr><td>Ext Data:</td><td>4 bits of data</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This sends a notification of 12 bits of data to a master identified by the address byte.
+ </td></tr>
+</table>
+
+</div>
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Alert Notice (slave addressed)</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0xE1</td><td class="dummy"></td></tr>
+<tr><td>Address:</td><td> Slave device address </td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td>1 byte of data </td><td class="dummy"></td></tr>
+<tr><td>Ext Data:</td><td>4 bits of data</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This sends a notification of 12 bits of data, associated with the slave address. Another device with a receiver may listen for the same address, or the "master" may listen on multiple addresses. Which of these two alert notice styles is appropriate depends on the design of the rest of the system.
+ </td></tr>
+</table>
+
+</div>
+</div>
+
+
+<div class="section">
+<h2>Communications</h2>
+<span class="subtitle">This special category of packets are used for tasks relating to RF communications, such as multi-packet data transfer and command acknowledgement</span>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>ACK (standard) </th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0xE8</td><td class="dummy"></td></tr>
+<tr><td>Address:</td><td>Slave device address </td><td class="dummy"></td></tr>
+<tr><td>Data:</td><td> old command </td><td class="dummy"></td></tr>
+<tr><td>Ext Data:</td><td>4 low bits of old checksum</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+Used to acknowledge receipt of a packet. 
+ </td></tr>
+</table>
+
+</div>
+
+</div>
+
+
+
+<div class="section">
+
+<h2>System Commands </h2>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Get Status</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0xF0</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>Don't care</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Don't care</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command causes the slave to return it's current status via serial, if available. 
+</td></tr>
+</table>
+
+</div>
+
+<div class="command">
+<table class="cmddesc">
+<tr><th colspan=2>Write EEPROM</th><th class="dummy"></th></tr>
+<tr><td>Command:</td><td>0xF1</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>New value</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Address to write within 0x10 block</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command causes the slave to write the specified value to it's EEPROM in 0x10 block (ie, extparam=2 -> address 0x12), where configuration parameters are often stored. 
+</td></tr>
+</table>
+
+</div>
+<div class="commandLong">
+<table class="cmddesc">
+<tr><th colspan=2>Write EEPROM Long</th><th class="dummy"></th></tr>
+<tr><td>Type:</td><td>Medium</td><td class="dummy"></td></tr>
+<tr><td>Command:</td><td>0xF2</td><td class="dummy"></td></tr>
+<tr><td>Option:</td><td>New value</td><td class="dummy"></td></tr>
+<tr><td>Extended:</td><td>Address to write within 0x10 block</td><td class="dummy"></td></tr>
+<tr><td colspan=3 class="dummy">
+ This command causes the slave to write the specified value to it's EEPROM in 0x10 block (ie, extparam=2 -> address 0x12), where configuration parameters are often stored. 
+</td></tr>
+</table>
+
+</div>
+</div>
+
+
+<h2>EEPROM options </h2>
+
+<table class="eeprom">
+<tr><th>Address</th><th>Name</th><th>Description</th></tr>
+<tr><td>0x00</td><td>Device Address</td><td>The 6 bit device address. High bits are ignored.</td></tr>
+<tr><td>0x01</td><td>EEPROM Version</td><td>EEPROM layout version. </td></tr>
+<tr><td>0x11</td><td>Fan On Temperature</td><td>Above this temperature, in deg. C, Fan will be turned on</td></tr>
+<tr><td>0x12</td><td>Fan Off Temperature</td><td>Below this temperature, in deg. C, Fan will be turned off</td></tr>
+<tr><td>0x13</td><td>Reserved</td><td>Reserved</td></tr>
+<tr><td>0x14</td><td>High Light Level</td><td>The highest light level for light response, 0-255</td></tr>
+<tr><td>0x15</td><td>High Light Setting</td><td>Settings when light level above High Light Level</td></tr>
+<tr><td>0x16</td><td>Med Light Level</td><td>The medium light level for light response, 0-255</td></tr>
+<tr><td>0x17</td><td>Med Light Setting</td><td>Settings when light level between Medium and High Light Level</td></tr>
+<tr><td>0x18</td><td>Low Light Level</td><td>The lowest light level for light response, 0-255</td></tr>
+<tr><td>0x19</td><td>Low Light Setting</td><td>Settings when light level between Low and Med Light Level</td></tr>
+<tr><td>0x1A</td><td>Lowest Light Setting</td><td>Settings when light level below Low Light Level</td></tr>
+<tr><td>0x1B</td><td>Light Enable</td><td>Set to 0 to disable light response, 1 to enable.</td></tr>
+<tr><td>0x1C</td><td>Red Brightness</td><td>Startup brightness, Red</td></tr>
+<tr><td>0x1D</td><td>Green Brightness</td><td>Startup brightness, Green</td></tr>
+<tr><td>0x1E</td><td>Blue Brightness</td><td>Startup brightness, Blue</td></tr>
+<tr><td>0x1F</td><td>White Brightness</td><td>Startup brightness, White</td></tr>
+</table>
+
+<div class="eepromoption">
+<h3> Light setting options </h3>
+<p> These four options control what happens to the PWM channels when the light level enters the specified range. The type of behavior is set by the two least significant bits </p>
+<table>
+<tr><th>Option</th><th>Effect</th></tr>
+<tr><td>0</td><td>Do nothing</td></tr>
+<tr><td>1</td><td>Turn off all channels</td></tr>
+<tr><td>2</td><td>Reload from EEPROM and latch</td></tr>
+<tr><td>3</td><td>Suspend PWM, max brightness = setting byte</td></tr>
+</table>
+<p>In the case of Suspend (3), the entire byte is used, meaning that 64 different brightness levels are possible, from 3 to 255. In all other cases, the rest of the setting byte is disregarded.</p>
+</div>
+
+</body>

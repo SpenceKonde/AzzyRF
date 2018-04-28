@@ -1,0 +1,5 @@
+Run pins 3 and 4 to CTS/RTS
+
+Remove or reverse LED from CTS. Reverse LED for RTS. 
+
+Expand operation header to include 2 pins, for CTS and RTS

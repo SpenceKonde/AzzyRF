@@ -1,0 +1,10 @@
+4 Byte:
+
+|00|A5~0|
+|Command|
+|Parameter|
+|Ext3~0|CSC 3~0|
+
+
+8 Byte:
+|01|A5~0|
