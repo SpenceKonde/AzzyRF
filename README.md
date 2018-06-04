@@ -1,7 +1,7 @@
 # AzzyRF
 433mhz OOK RF protocol for Arduino. 
 
-No, these have not been converted into a library yet. 
+No, these have not been converted into a library yet. This is a project for my personal use, not something that is meant to be readily usable by others in it's current form. It may be valuable as a resource for others who are designing an OOK RF protocol, or decoding one created by someone else. 
 
 
 ### Hardware
