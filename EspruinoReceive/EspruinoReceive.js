@@ -1,5 +1,6 @@
 Serial2.setup(115200,{rx:16, tx:17});
 Serial2.on('data',function(data){handleSerial(data);});
+var RFAddress=0;
 
 function handleSerial(data) {
   console.log(data);
@@ -15,5 +16,25 @@ function handleSerial(data) {
   for (i=0;i<l;i++){
     rcv.data[i]=parseInt(data.substr(2*i+1,2),16);
   }
-  console.log(JSON.stringify(rcv));
+  rcv.length=l;
+  rcv.destaddress=rcv.data[0]&0x3F;
+  if (RFAddress==0 || RFAddress==rcv.destaddress) { //is the packet for this device, or is this device universal listener?
+    processPacket(rcv);
+  }
+}
+
+function processPacket(rcvpkt) {
+  if (rcvpkt.version==1) {
+    processPacket_V1(rcvpkt);
+  } else {
+    processPacket_V2(rcvpkt);
+  }
+}
+
+function processPacket_V1(rcvpkt) {
+  
+}
+
+function processPacket_V2(rcvpkt) {
+  
 }
