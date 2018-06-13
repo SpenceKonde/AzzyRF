@@ -274,6 +274,10 @@ byte handleReceive() {
       resetReceive();
       return 0;
     }
+    if (recvMessage[0]==0 &&  recvMessage[1]==0 && recvMessage[2]==0 && (recvMessage[3]&0xF0)==0) {
+      resetReceive();
+      return 0;
+    }
     if (!isForMe()) { //matches on MyAddress==0, destination address==0, destination address==MyAddress.
       resetReceive();
       return 0;
