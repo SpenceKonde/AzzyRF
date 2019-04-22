@@ -45,6 +45,8 @@ char serBuffer[MAX_SER_LEN];
 #define TIME_MULT * 1
 #elif(F_CPU==16000000)
 #define TIME_MULT * 2
+#elif(F_CPU==12000000)
+#define TIME_MULT * 3/2
 #endif
 
 const unsigned int rxSyncMin  = 1750 TIME_MULT;
