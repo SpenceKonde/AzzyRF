@@ -84,6 +84,7 @@ const char ATVERS[] PROGMEM = {"AT+VERS"};
 void setup() {
   // put your setup code here, to run once:
   pinMode(TX_PIN, OUTPUT);
+  #ifdef TCCR1A //In this case, it's a classic AVR
   TCCR1A = 0;
   TCCR1B = 0;
   TIFR1 = bit (ICF1) | bit (TOV1);  // clear flags so we don't get a bogus interrupt
@@ -92,6 +93,9 @@ void setup() {
   // start Timer 1, prescalar of 8, edge select on falling edge
   TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
   //ready to rock and roll
+  #else //else assume it's a megaAVR
+  #error "architecture not supported"
+  #endif
   SERIAL_CMD.begin(115200);
 }
 
