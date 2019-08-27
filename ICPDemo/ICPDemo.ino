@@ -61,21 +61,28 @@ char serBuffer[MAX_SER_LEN];
 // ##############
 
 // Version 2.2/2.3
+#ifdef ICPTIMER //means it's a megaavr
 #if(F_CPU==8000000)
-#define TIME_MULT * 1
-#elif(F_CPU==10000000)
-#define TIME_MULT * 5)/(4
+#define TIME_MULT * 4
+#if(F_CPU==10000000)
+#define TIME_MULT * 5
 #elif(F_CPU==16000000)
-#define TIME_MULT * 2
+#define TIME_MULT * 8
 #elif(F_CPU==20000000)
-#define TIME_MULT * 5)/(2
+#define TIME_MULT * 10
 #else 
 #error "Unsupported clock speed"
 #endif
+#else
+#if(F_CPU==8000000)
+#define TIME_MULT * 1
+#elif(F_CPU==16000000)
+#define TIME_MULT * 2
+#else 
+#error "Unsupported clock speed"
+#endif
+#endif
 
-//So this means that for, say, 20MHz, TIME_MULT is "* 5)/(2" 
-//this gets substituted in so rxSyncMin for example is set
-//to (1750 * 5)/(2) 
 
 const unsigned int rxSyncMin  = (1750 TIME_MULT);
 const unsigned int rxSyncMax  = (2250 TIME_MULT);
