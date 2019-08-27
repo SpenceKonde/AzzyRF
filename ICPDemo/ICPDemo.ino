@@ -11,9 +11,19 @@ unsigned long lastSendSig = 0;
 unsigned long lastSer = 0;
 char * pEnd; //dummy pointer for strtol
 
+//if it's a megaavr, figure out which timer we use:
+#if defined(TCB0)||defined(TCB1)||defined(TCB2) //it's a megaavr
+  #if defined(TCB1)
+  #define ICPTIMER TCB1
+  #else
+  #define ICPTIMER TCB0
+  #endif
+#endif
 
 //Microcontroller-specific
 //328p
+
+#ifdef __AVR_ATmega328p__
 
 #define RX_PIN_STATE (PINB&1) //RX on pin 8 for input capture. 
 #define TX_PIN 7
@@ -21,6 +31,16 @@ char * pEnd; //dummy pointer for strtol
 #define txBV 128
 #define SERIAL_CMD Serial
 //#define SERIAL_DBG Serial
+
+#endif
+
+#ifdef __AVR_ATtinyx16 
+#define RX_PIN_STATE (VPORTA.IN&1) //RX on pin A1 for input capture. 
+#define TX_PIN 7
+#define txPIN VPORTA.IN
+#define txBV 128
+#define SERIAL_CMD Serial
+#endif
 
 //Configuration
 
@@ -43,17 +63,27 @@ char serBuffer[MAX_SER_LEN];
 // Version 2.2/2.3
 #if(F_CPU==8000000)
 #define TIME_MULT * 1
+#elif(F_CPU==10000000)
+#define TIME_MULT * 5)/(4
 #elif(F_CPU==16000000)
 #define TIME_MULT * 2
+#elif(F_CPU==20000000)
+#define TIME_MULT * 5)/(2
+#else 
+#error "Unsupported clock speed"
 #endif
 
-const unsigned int rxSyncMin  = 1750 TIME_MULT;
-const unsigned int rxSyncMax  = 2250 TIME_MULT;
-const unsigned int rxZeroMin  = 100 TIME_MULT;
-const unsigned int rxZeroMax  = 390 TIME_MULT;
-const unsigned int rxOneMin  = 410 TIME_MULT;
-const unsigned int rxOneMax  = 700 TIME_MULT;
-const unsigned int rxLowMax  = 600 TIME_MULT;
+//So this means that for, say, 20MHz, TIME_MULT is "* 5)/(2" 
+//this gets substituted in so rxSyncMin for example is set
+//to (1750 * 5)/(2) 
+
+const unsigned int rxSyncMin  = (1750 TIME_MULT);
+const unsigned int rxSyncMax  = (2250 TIME_MULT);
+const unsigned int rxZeroMin  = (100 TIME_MULT);
+const unsigned int rxZeroMax  = (390 TIME_MULT);
+const unsigned int rxOneMin  = (410 TIME_MULT);
+const unsigned int rxOneMax  = (700 TIME_MULT);
+const unsigned int rxLowMax  = (600 TIME_MULT);
 const unsigned int txOneLength  = 500;
 const unsigned int txZeroLength  = 300;
 const unsigned int txSyncTime  = 2000;
@@ -84,7 +114,12 @@ const char ATVERS[] PROGMEM = {"AT+VERS"};
 void setup() {
   // put your setup code here, to run once:
   pinMode(TX_PIN, OUTPUT);
-  #ifdef TCCR1A //In this case, it's a classic AVR
+  setupTimer();
+  SERIAL_CMD.begin(115200);
+}
+
+void setupTimer() {
+  #if defined(TCCR1A) && defined(TIMSK1) //In this case, it's a classic AVR with a normal timer1
   TCCR1A = 0;
   TCCR1B = 0;
   TIFR1 = bit (ICF1) | bit (TOV1);  // clear flags so we don't get a bogus interrupt
@@ -93,11 +128,14 @@ void setup() {
   // start Timer 1, prescalar of 8, edge select on falling edge
   TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
   //ready to rock and roll
-  #else //else assume it's a megaAVR
+  #elif defined(ICPTIMER) // it's a megaavr - (this was defined above)
+  
+  
+  #else
   #error "architecture not supported"
   #endif
-  SERIAL_CMD.begin(115200);
 }
+
 
 void loop() {
   // put your main code here, to run repeatedly:
