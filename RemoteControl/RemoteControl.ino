@@ -74,13 +74,12 @@ void setup() {
   tval = EEPROM.read(9);
   myid = (tval == 255) ? myid : tval;
   pinMode(txpin,OUTPUT);
-  //pinMode(LED5,OUTPUT);
-  pinMode(3, INPUT_PULLUP);
-  pinMode(4, INPUT_PULLUP);
-  pinMode(5, INPUT_PULLUP);
-  pinMode(6, INPUT_PULLUP);
-  pinMode(7, INPUT_PULLUP);
-  pinMode(10, INPUT_PULLUP);
+  pinMode(BUTTON_1, INPUT_PULLUP);
+  pinMode(BUTTON_2, INPUT_PULLUP);
+  pinMode(BUTTON_3, INPUT_PULLUP);
+  pinMode(BUTTON_4, INPUT_PULLUP);
+  pinMode(BUTTON_5, INPUT_PULLUP);
+  pinMode(BUTTON_6, INPUT_PULLUP);
   GIMSK |= 1 << PCIE0; //enable PCINT on port A
   PCMSK0 = 0;
   ADCSRA &= 127; //turn off ADC, we don't need it and it's just gonna waste power.
