@@ -34,7 +34,7 @@ char * pEnd; //dummy pointer for strtol
 
 #endif
 
-#ifdef __AVR_ATtinyx16 
+#ifdef __AVR_ATtinyx16__
 #define RX_PIN_STATE (VPORTA.IN&2) //RX on pin A1 for input capture. 
 #define TX_PIN 7
 #define txPIN VPORTA.IN
