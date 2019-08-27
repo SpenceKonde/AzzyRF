@@ -12,7 +12,7 @@ unsigned long lastSer = 0;
 char * pEnd; //dummy pointer for strtol
 
 //if it's a megaavr, figure out which timer we use:
-#if defined(TCB0)||defined(TCB1)||defined(TCB2) //it's a megaavr
+#if defined(TCB0)||defined(TCB1) //it's a megaavr
   #if defined(TCB1)
   #define ICPTIMER TCB1
   #else
@@ -35,7 +35,7 @@ char * pEnd; //dummy pointer for strtol
 #endif
 
 #ifdef __AVR_ATtinyx16 
-#define RX_PIN_STATE (VPORTA.IN&1) //RX on pin A1 for input capture. 
+#define RX_PIN_STATE (VPORTA.IN&2) //RX on pin A1 for input capture. 
 #define TX_PIN 7
 #define txPIN VPORTA.IN
 #define txBV 128
@@ -117,25 +117,6 @@ void setup() {
   setupTimer();
   SERIAL_CMD.begin(115200);
 }
-
-void setupTimer() {
-  #if defined(TCCR1A) && defined(TIMSK1) //In this case, it's a classic AVR with a normal timer1
-  TCCR1A = 0;
-  TCCR1B = 0;
-  TIFR1 = bit (ICF1) | bit (TOV1);  // clear flags so we don't get a bogus interrupt
-  TCNT1 = 0;          // Counter to zero
-  TIMSK1 = 1 << ICIE1; // interrupt on Timer 1 input capture
-  // start Timer 1, prescalar of 8, edge select on falling edge
-  TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
-  //ready to rock and roll
-  #elif defined(ICPTIMER) // it's a megaavr - (this was defined above)
-  
-  
-  #else
-  #error "architecture not supported"
-  #endif
-}
-
 
 void loop() {
   // put your main code here, to run repeatedly:
@@ -352,7 +333,11 @@ void resetReceive() {
   bitnum = 0;
   memset(rxBuffer, 0, 32);
   gotMessage = 0;
+  #ifdef ICPTIMER
+  ICPTIMER.INTCTRL=0x01;
+  #else
   TIMSK1 = 1 << ICIE1;
+  #endif
   return;
 }
 
@@ -392,12 +377,57 @@ unsigned long getPacketSig() {
   return lastpacketsig;
 }
 
+void setupTimer() {
+  #if defined(TCCR1A) && defined(TIMSK1) //In this case, it's a classic AVR with a normal timer1
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TIFR1 = bit (ICF1) | bit (TOV1);  // clear flags so we don't get a bogus interrupt
+  TCNT1 = 0;          // Counter to zero
+  TIMSK1 = 1 << ICIE1; // interrupt on Timer 1 input capture
+  // start Timer 1, prescalar of 8, edge select on falling edge
+  TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
+  //ready to rock and roll
+  #elif defined(ICPTIMER) // it's a megaavr - (this was defined above)
+  ICPTIMER.CTRLA=0x02; //disable, CKPER/2 clock source.
+  ICPTIMER.CTRLB=0x03; //Input Capture Frequency Measurement mode
+  ICPTIMER.INTFLAGS=1; //clear flag
+  ICPTIMER.CNT=0; //count to 0
+  ICPTIMER.INTCTRL=0x01;
+  EVSYS.ASYNCCH0=0x0B; //PA1 Set event channel for PA1 pin
+  #if (ICPTIMER==TCB0)
+  EVSYS.ASYNCUSER0=0x03;
+  #else
+  EVSYS.ASYNCUSER11=0x03;
+  #endif
+  ICPTIMER.EVCTRL=0x51; //filter, falling edge, ICIE=1
+  ICPTIMER.CTRLA=0x03; //enable
+  #else
+  #error "architecture not supported"
+  #endif
+}
+
+#ifdef ICPTIMER
+#if (ICPTIMER==TCB0)
+ISR(TCB0_INT_vect)
+#else
+ISR(TCB1_INT_vect)
+#endif
+#else
 ISR (TIMER1_CAPT_vect)
+#endif
 {
   static unsigned long lasttime = 0;
+  #ifdef ICPTIMER
+  unsigned int newTime = ICPTIMER.CCMP; //immediately get the ICR value
+  #else
   unsigned int newTime = ICR1; //immediately get the ICR value
+  #endif
   byte state = (RX_PIN_STATE);
+  #ifdef ICPTIMER
+  ICPTIMER.EVCTRL=state?0x51:0x41; //trigger on falling edge if pin is high, otherwise rising edge
+  #else
   TCCR1B = state ? (1 << CS11 | 1 << ICNC1) : (1 << CS11 | 1 << ICNC1 | 1 << ICES1); //and set edge
+  #endif
   unsigned int duration = newTime - lasttime;
   lasttime = newTime;
   if (state) {
@@ -436,8 +466,11 @@ ISR (TIMER1_CAPT_vect)
         bitnum = 0;
         receiving = 0;
         gotMessage = 1;
+        #ifdef ICPTIMER
+        ICPTIMER.INTCTRL=0x00;
+        #else
         TIMSK1 = 0; //turn off input capture;
-
+        #endif
       } else {
         bitnum++;
       }
@@ -449,7 +482,11 @@ ISR (TIMER1_CAPT_vect)
 
 byte doTransmit(byte len, byte vers) {
   if (!(receiving || lastPacketTime)) {
+    #ifdef ICPTIMER
+    ICPTIMER.INTCTRL=0x00;
+    #else
     TIMSK1 = 0;
+    #endif
 #ifdef LED_TX
     digitalWrite(LED_TX, TX_LED_ON);
 #endif
@@ -502,8 +539,12 @@ byte doTransmit(byte len, byte vers) {
     }
 #ifdef LED_TX
     digitalWrite(LED_TX, TX_LED_OFF);
-#endif
+#endif  
+    #ifdef ICPTIMER
+    ICPTIMER.INTCTRL=0x01;
+    #else
     TIMSK1 = 1 << ICIE1;
+    #endif
     return 1;
   } else {
     return 0;
