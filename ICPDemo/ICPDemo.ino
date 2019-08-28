@@ -119,6 +119,8 @@ void setup() {
   pinMode(TX_PIN, OUTPUT);
   setupTimer();
   SERIAL_CMD.begin(115200);
+  delay(1000);
+  SERIAL_CMD.println("OK");
 }
 
 void loop() {
@@ -179,7 +181,7 @@ void processSerial() {
         if (SerRXidx >= MAX_SER_LEN) {
           SerRXidx = 0;
     SerRXmax = 0;
-          SERIAL_CMD.println(F("ERROR"));
+          SERIAL_CMD.println(F("ERROR 1"));
           resetSer();
         }
       } else {
@@ -190,7 +192,8 @@ void processSerial() {
           if (SerRXmax==255 ) {//error condition
             SerRXmax=0;
             SerRXidx=0;
-            SERIAL_CMD.println(F("ERROR"));
+            SERIAL_CMD.println(F("ERROR 2"));
+            SERIAL_CMD.println(serBuffer);
             resetSer();
           }
         }
@@ -201,7 +204,7 @@ void processSerial() {
     }
   }
   if (millis() - lastSer > 10000 && lastSer) {
-    SERIAL_CMD.println(F("ERROR"));
+    SERIAL_CMD.println(F("ERROR 3"));
     SerRXidx = 0;
     SerRXmax = 0;
     resetSer();
@@ -298,14 +301,17 @@ byte handleReceive() {
     byte vers = checkCSC(); //checkCSC() gives 0 on failed CSC, 1 on v1 structure (ACD...), 2 on v2 structure (DSCD...)
     if (!vers) { //if vers=0, unknown format ot bad CSC
       resetReceive();
+  Serial.println("RST1");
       return 0;
     }
     if (recvMessage[0]==0 &&  recvMessage[1]==0 && recvMessage[2]==0 && (recvMessage[3]&0xF0)==0) {
       resetReceive();
+  Serial.println("RST2");
       return 0;
     }
     if (!isForMe()) { //matches on MyAddress==0, destination address==0, destination address==MyAddress.
       resetReceive();
+  Serial.println("RST3");
       return 0;
     }
     if (lastPacketSig == getPacketSig() && lastPacketTime) {
@@ -318,7 +324,7 @@ byte handleReceive() {
     lastPacketTime = millis();
     byte rlen = ((pktLength >> 3) + 1) | ((vers - 1) << 6);
     
-    memcpy(recvMessage, (const void* )rxBuffer, 32);
+    memcpy(recvMessage, rxBuffer, 32);
     resetReceive();
     return rlen;
   } else {
@@ -334,7 +340,7 @@ byte handleReceive() {
 void resetReceive() {
 
   bitnum = 0;
-  memset((void *)rxBuffer, 0, 32);
+  memset(rxBuffer, 0, 32);
   gotMessage = 0;
   #ifdef TCB1
   TCB1.INTCTRL=0x01;
@@ -430,7 +436,7 @@ ISR (TIMER1_CAPT_vect)
       if (duration > rxLowMax) {
         receiving = 0;
         bitnum = 0; // reset to bit zero
-        memset((void*)rxBuffer, 0, 32); //clear buffer
+        memset(rxBuffer, 0, 32); //clear buffer
       }
     } else {
       if (duration > rxSyncMin && duration < rxSyncMax) {
@@ -446,7 +452,7 @@ ISR (TIMER1_CAPT_vect)
       } else {
         receiving = 0;
         bitnum = 0; // reset to bit zero
-        memset((void*)rxBuffer, 0, 32); //clear buffer
+        memset(rxBuffer, 0, 32); //clear buffer
         return;
       }
       if ((bitnum & 7) == 7) {
