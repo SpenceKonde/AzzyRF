@@ -12,18 +12,12 @@ unsigned long lastSer = 0;
 char * pEnd; //dummy pointer for strtol
 
 //if it's a megaavr, figure out which timer we use:
-#if defined(TCB0)||defined(TCB1) //it's a megaavr
-  #if defined(TCB1)
-  #define ICPTIMER TCB1
-  #else
-  #define ICPTIMER TCB0
-  #endif
-#endif
+
 
 //Microcontroller-specific
 //328p
 
-#ifdef __AVR_ATmega328p__
+#ifdef __AVR_ATmega328P__
 
 #define RX_PIN_STATE (PINB&1) //RX on pin 8 for input capture. 
 #define TX_PIN 7
@@ -61,10 +55,10 @@ char serBuffer[MAX_SER_LEN];
 // ##############
 
 // Version 2.2/2.3
-#ifdef ICPTIMER //means it's a megaavr
+#ifdef TCB1 //means it's a megaavr
 #if(F_CPU==8000000)
 #define TIME_MULT * 4
-#if(F_CPU==10000000)
+#elif(F_CPU==10000000)
 #define TIME_MULT * 5
 #elif(F_CPU==16000000)
 #define TIME_MULT * 8
@@ -78,13 +72,10 @@ char serBuffer[MAX_SER_LEN];
 #define TIME_MULT * 1
 #elif(F_CPU==16000000)
 #define TIME_MULT * 2
-<<<<<<< HEAD
 #elif(F_CPU==12000000)
 #define TIME_MULT * 3/2
-=======
 #else 
 #error "Unsupported clock speed"
->>>>>>> fe3ebd8157eacb7560cf26b3c72180f064cceccc
 #endif
 #endif
 
@@ -327,7 +318,7 @@ byte handleReceive() {
     lastPacketTime = millis();
     byte rlen = ((pktLength >> 3) + 1) | ((vers - 1) << 6);
     
-    memcpy(recvMessage, rxBuffer, 32);
+    memcpy(recvMessage, (const void* )rxBuffer, 32);
     resetReceive();
     return rlen;
   } else {
@@ -343,10 +334,10 @@ byte handleReceive() {
 void resetReceive() {
 
   bitnum = 0;
-  memset(rxBuffer, 0, 32);
+  memset((void *)rxBuffer, 0, 32);
   gotMessage = 0;
-  #ifdef ICPTIMER
-  ICPTIMER.INTCTRL=0x01;
+  #ifdef TCB1
+  TCB1.INTCTRL=0x01;
   #else
   TIMSK1 = 1 << ICIE1;
   #endif
@@ -399,44 +390,36 @@ void setupTimer() {
   // start Timer 1, prescalar of 8, edge select on falling edge
   TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
   //ready to rock and roll
-  #elif defined(ICPTIMER) // it's a megaavr - (this was defined above)
-  ICPTIMER.CTRLA=0x02; //disable, CKPER/2 clock source.
-  ICPTIMER.CTRLB=0x03; //Input Capture Frequency Measurement mode
-  ICPTIMER.INTFLAGS=1; //clear flag
-  ICPTIMER.CNT=0; //count to 0
-  ICPTIMER.INTCTRL=0x01;
+  #elif defined(TCB1) // it's a megaavr - (this was defined above)
+  TCB1.CTRLA=0x02; //disable, CKPER/2 clock source.
+  TCB1.CTRLB=0x03; //Input Capture Frequency Measurement mode
+  TCB1.INTFLAGS=1; //clear flag
+  TCB1.CNT=0; //count to 0
+  TCB1.INTCTRL=0x01;
   EVSYS.ASYNCCH0=0x0B; //PA1 Set event channel for PA1 pin
-  #if (ICPTIMER==TCB0)
-  EVSYS.ASYNCUSER0=0x03;
-  #else
   EVSYS.ASYNCUSER11=0x03;
-  #endif
-  ICPTIMER.EVCTRL=0x51; //filter, falling edge, ICIE=1
-  ICPTIMER.CTRLA=0x03; //enable
+  TCB1.EVCTRL=0x51; //filter, falling edge, ICIE=1
+  TCB1.CTRLA=0x03; //enable
   #else
   #error "architecture not supported"
   #endif
 }
 
-#ifdef ICPTIMER
-#if (ICPTIMER==TCB0)
-ISR(TCB0_INT_vect)
-#else
+#ifdef TCB1
 ISR(TCB1_INT_vect)
-#endif
 #else
 ISR (TIMER1_CAPT_vect)
 #endif
 {
   static unsigned long lasttime = 0;
-  #ifdef ICPTIMER
-  unsigned int newTime = ICPTIMER.CCMP; //immediately get the ICR value
+  #ifdef TCB1
+  unsigned int newTime = TCB1.CCMP; //immediately get the ICR value
   #else
   unsigned int newTime = ICR1; //immediately get the ICR value
   #endif
   byte state = (RX_PIN_STATE);
-  #ifdef ICPTIMER
-  ICPTIMER.EVCTRL=state?0x51:0x41; //trigger on falling edge if pin is high, otherwise rising edge
+  #ifdef TCB1
+  TCB1.EVCTRL=state?0x51:0x41; //trigger on falling edge if pin is high, otherwise rising edge
   #else
   TCCR1B = state ? (1 << CS11 | 1 << ICNC1) : (1 << CS11 | 1 << ICNC1 | 1 << ICES1); //and set edge
   #endif
@@ -447,7 +430,7 @@ ISR (TIMER1_CAPT_vect)
       if (duration > rxLowMax) {
         receiving = 0;
         bitnum = 0; // reset to bit zero
-        memset(rxBuffer, 0, 32); //clear buffer
+        memset((void*)rxBuffer, 0, 32); //clear buffer
       }
     } else {
       if (duration > rxSyncMin && duration < rxSyncMax) {
@@ -463,7 +446,7 @@ ISR (TIMER1_CAPT_vect)
       } else {
         receiving = 0;
         bitnum = 0; // reset to bit zero
-        memset(rxBuffer, 0, 32); //clear buffer
+        memset((void*)rxBuffer, 0, 32); //clear buffer
         return;
       }
       if ((bitnum & 7) == 7) {
@@ -478,8 +461,8 @@ ISR (TIMER1_CAPT_vect)
         bitnum = 0;
         receiving = 0;
         gotMessage = 1;
-        #ifdef ICPTIMER
-        ICPTIMER.INTCTRL=0x00;
+        #ifdef TCB1
+        TCB1.INTCTRL=0x00;
         #else
         TIMSK1 = 0; //turn off input capture;
         #endif
@@ -494,15 +477,15 @@ ISR (TIMER1_CAPT_vect)
 
 byte doTransmit(byte len, byte vers) {
   if (!(receiving || lastPacketTime)) {
-    #ifdef ICPTIMER
-    ICPTIMER.INTCTRL=0x00;
+    #ifdef TCB1
+    TCB1.INTCTRL=0x00;
     #else
     TIMSK1 = 0;
     #endif
 #ifdef LED_TX
     digitalWrite(LED_TX, TX_LED_ON);
 #endif
-    digitalWrite(TX_PIN, 0); // known state
+    digitalWrite(TX_PIN, LOW); // known state
     byte txchecksum = 0;
     byte txchecksum2 = 0;
     for (byte i = 0; i < len - 1; i++) {
@@ -525,7 +508,7 @@ byte doTransmit(byte len, byte vers) {
         //digitalWrite(txpin, j & 1);
         txPIN = txBV;
       }
-      digitalWrite(TX_PIN, 1);
+      digitalWrite(TX_PIN, HIGH);
       delayMicroseconds(txSyncTime);
       txPIN = txBV;
       delayMicroseconds(txSyncTime);
@@ -546,14 +529,14 @@ byte doTransmit(byte len, byte vers) {
         //done with that byte
       }
       //done with sending this packet;
-      digitalWrite(TX_PIN, 0); //make sure it's off;
+      digitalWrite(TX_PIN, LOW); //make sure it's off;
       delayMicroseconds(txRepDelay); //wait before doing the next round.
     }
 #ifdef LED_TX
     digitalWrite(LED_TX, TX_LED_OFF);
 #endif  
-    #ifdef ICPTIMER
-    ICPTIMER.INTCTRL=0x01;
+    #ifdef TCB1
+    TCB1.INTCTRL=0x01;
     #else
     TIMSK1 = 1 << ICIE1;
     #endif
