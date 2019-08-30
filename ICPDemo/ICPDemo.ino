@@ -112,6 +112,7 @@ const char ATADRQ[] PROGMEM = {"AT+ADR?"};
 const char ATADR[] PROGMEM = {"AT+ADR"};
 const char ATVERS[] PROGMEM = {"AT+VERS"};
 
+volatile int bitlen[256];
 
 
 void setup() {
@@ -305,6 +306,10 @@ byte handleReceive() {
       return 0;
     }
     if (recvMessage[0]==0 &&  recvMessage[1]==0 && recvMessage[2]==0 && (recvMessage[3]&0xF0)==0) {
+      for (byte i = 0;i<256;i++){
+        Serial.print(bitlen[i]);
+        Serial.print(',');
+      }
       resetReceive();
   Serial.println("RST2");
       return 0;
@@ -347,6 +352,7 @@ void resetReceive() {
   #else
   TIMSK1 = 1 << ICIE1;
   #endif
+  memset(bitlen,0,512);
   return;
 }
 
@@ -437,6 +443,7 @@ ISR (TIMER1_CAPT_vect)
         receiving = 0;
         bitnum = 0; // reset to bit zero
         memset(rxBuffer, 0, 32); //clear buffer
+        memset(bitlen,0,512);
       }
     } else {
       if (duration > rxSyncMin && duration < rxSyncMax) {
@@ -445,6 +452,7 @@ ISR (TIMER1_CAPT_vect)
     }
   } else {
     if (receiving) {
+      bitlen[bitnum]=duration;
       if (duration > rxZeroMin && duration < rxZeroMax) {
         dataIn = dataIn << 1;
       } else if (duration > rxOneMin && duration < rxOneMax) {
