@@ -1,5 +1,6 @@
 #include <avr/sleep.h>
 #include <avr/power.h>
+#include <util/crc16.h>
 
 #define txpin 2
 #define txPIN PINB
@@ -112,21 +113,24 @@ void loop() {
   //btnst=(~PINB)&0x0F;
   byte btnst = getBtnst();
   if (btnst) {
+    byte vers=1;
     Serial.println(btnst);
     if (btnst == 1 ) {
-      preparePayload16(0,0);
+      preparePayload(0,0);
     } else if (btnst == 2) {
-      preparePayload16(1,0);
+      preparePayload8(1,0);
     } else if (btnst == 4) {
       preparePayload16(2,0);
     } else if (btnst == 8) {
-      preparePayload16(3,0);
+      preparePayload32(3,0);
     } else if (btnst ==16){
-      preparePayload16(4,0);
+      preparePayload(4,0);
+      vers=2;
     } else if (btnst ==32){
-      preparePayload16(5,0);
+      preparePayload32(5,0);
+      vers=2;
     }
-    doTransmit(10);
+    doTransmit(10,TXLength,vers);
   }
   delay(50);
   if (!btnst) { //make sure all the buttons are not pressed, otherwise skip sleep and send the signal again
@@ -226,18 +230,24 @@ void preparePayload32(byte btn,byte rover) {
 
 
 
-void doTransmit(int rep) { //rep is the number of repetitions
+void doTransmit(int rep, byte len, byte vers) { //rep is the number of repetitions
   Serial.println("Starting transmit");
   
   byte txchecksum = 0;
-  for (byte i = 0; i < TXLength - 1; i++) {
+    byte txchecksum2 = 0;
+  for (byte i = 0; i < len - 1; i++) {
     txchecksum = txchecksum ^ txrxbuffer[i];
+      txchecksum2 = _crc8_ccitt_update(txchecksum2,txrxbuffer[i]);
   }
-  if (TXLength == 4) {
+  if (len == 4) {
     txchecksum = (txchecksum & 0x0F) ^ (txchecksum >> 4) ^ ((txrxbuffer[3] & 0xF0) >> 4);
-    txrxbuffer[3] = (txrxbuffer[3] & 0xF0) + (txchecksum & 0x0F);
+    
+      txchecksum2 = (txchecksum2 & 0x0F) ^ (txchecksum2 >> 4) ^ ((txrxbuffer[3] & 0xF0) >> 4);
+      if (txchecksum == txchecksum2)txchecksum2++;
+      txrxbuffer[3] = (txrxbuffer[3] & 0xF0) | 0x0F & (vers == 1 ? txchecksum : txchecksum2);
   } else {
-    txrxbuffer[TXLength - 1] = txchecksum;
+      if (txchecksum == txchecksum2)txchecksum2++;
+      txrxbuffer[len - 1] = (vers == 1 ? txchecksum : txchecksum2);
   }
   for (byte r = 0; r < rep; r++) {
     
@@ -279,3 +289,7 @@ void doTransmit(int rep) { //rep is the number of repetitions
   }
   TXLength = 0;
 }
+
+#ifndef OLD_PINOUT
+#error "Wrong pinout selected!"
+#endif
