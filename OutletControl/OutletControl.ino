@@ -93,15 +93,14 @@ const byte commands[][4] = {
   {0x1E,0x40,0xFF,0x00}, //Pin 0, PA6
   {0x1E,0x40,0xFF,0x10}, //pin 1, PA7
   {0x1E,0x40,0xFF,0x20}, //pin 2, PA1
-  {0x1E,0x40,0xFF,0xF0}, //not used
+  {0x1E,0x41,0xFF,0x10}, //Same as tower light, but on distinct signal
   {0x1E,0x40,0x00,0x00},
   {0x1E,0x40,0x00,0x10},
   {0x1E,0x40,0x00,0x20},
-  {0x1E,0x40,0x00,0xF0},
   {0x1F,0x1E,0x02,0x00} //legacy tower light signal
 };
 
-const byte portbv[4]={0x40,0x80,0x02,0x02};
+const byte portbv[3]={0x40,0x80,0x02};
 
 #define BRIGHTNESS_THRESHOLD 400 //out of 1024;
 #define LIGHT_DURATION 60000UL //duration of 
@@ -125,20 +124,21 @@ void loop() {
         break;
       }
     }
-    if (cmd<9){
-      if (cmd == 8) {
+    if (cmd<8){
+      if (cmd == 7) {
         analogRead(3); //dummy readings
         analogRead(3); //dummy readings
         if (analogRead(3) < BRIGHTNESS_THRESHOLD) { //if brightness is below threshold
           PORTA.OUTSET=portbv[1];
           stairsOnAt=millis();
         }
-      } else { //cmd is 0~7
-        if ((cmd|0x03)==0x03) {
-          // do nothing, it's one of the unused ones above 
-        } else if (cmd>3) { //cmd is 4,5,6,7, OFF 
+      } else if (cmd == 3) {
+        PORTA.OUTSET=portbv[1];
+        stairsOnAt=millis();
+      } else { //cmd is 0~2 or 4~6
+        if (cmd>3) { //cmd is 4,5,6 OFF 
           PORTA.OUTCLR=portbv[(cmd&0x03)];
-        } else {
+        } else {//cmd is 0,1,2 ON
           PORTA.OUTSET=portbv[(cmd&0x03)];
         }
       }
