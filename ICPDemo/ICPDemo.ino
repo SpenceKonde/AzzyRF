@@ -28,9 +28,10 @@ char * pEnd; //dummy pointer for strtol
 
 #endif
 
-#ifdef __AVR_ATtinyx16__
-#define RX_PIN_STATE (VPORTA.IN&2) //RX on pin A1 for input capture. 
-#define TX_PIN 7
+#if defined(__AVR_ATtinyx16__) || defined(__AVR_ATtinyx06__)
+#define RX_PIN_STATE (VPORTA.IN&2) //RX on pin A1 for input capture.  pin 14
+#define RX_ASYNC0 0x0B
+#define TX_PIN 3
 #define txPIN VPORTA.IN
 #define txBV 128
 #define SERIAL_CMD Serial
@@ -55,7 +56,7 @@ char serBuffer[MAX_SER_LEN];
 // ##############
 
 // Version 2.2/2.3
-#ifdef TCB1 //means it's a megaavr
+#if defined(TCB1) || defined(TCB0) //means it's a megaavr
 #if(F_CPU==8000000)
 #define TIME_MULT * 4
 #elif(F_CPU==10000000)
@@ -64,7 +65,7 @@ char serBuffer[MAX_SER_LEN];
 #define TIME_MULT * 8
 #elif(F_CPU==20000000)
 #define TIME_MULT * 10
-#else 
+#else
 #error "Unsupported clock speed"
 #endif
 #else
@@ -74,7 +75,7 @@ char serBuffer[MAX_SER_LEN];
 #define TIME_MULT * 2
 #elif(F_CPU==12000000)
 #define TIME_MULT * 3/2
-#else 
+#else
 #error "Unsupported clock speed"
 #endif
 #endif
@@ -97,7 +98,7 @@ const byte txTrainRep  = 30;
 const int commandForgetTime = 5000;
 const char endMarker = '\r';
 const char endMarker2 = '\n';
-byte SendVersion=1;
+byte SendVersion = 1;
 
 // Commands:
 
@@ -112,7 +113,6 @@ const char ATADRQ[] PROGMEM = {"AT+ADR?"};
 const char ATADR[] PROGMEM = {"AT+ADR"};
 const char ATVERS[] PROGMEM = {"AT+VERS"};
 
-volatile int bitlen[256];
 
 
 void setup() {
@@ -139,50 +139,52 @@ void processSerial() {
   static byte SerRXidx;
   static byte SerRXmax;
   while (SERIAL_CMD.available() > 0) {
-    char c=SERIAL_CMD.read();
+    char c = SERIAL_CMD.read();
     if (SerRXmax) {
-      if (ndx == 1) {
-        minb[1] = c;
-        ndx = 0;
-        byte t = strtol(minb, &pEnd, 16);
-        if (SerRXmax == 1) {
-          if (t<32){
-            MyAddress = t;
-            SERIAL_CMD.println(F("OK"));
-          } else {
-            SERIAL_CMD.println(F("ERROR"));
-          }
+      if (c != endMarker && c != endMarker2) {
+        if (ndx == 1) {
+          minb[1] = c;
           ndx = 0;
+          byte t = strtol(minb, &pEnd, 16);
+          if (SerRXmax == 1) {
+            if (t < 32) {
+              MyAddress = t;
+              SERIAL_CMD.println(F("OK"));
+            } else {
+              SERIAL_CMD.println(F("ERROR"));
+            }
+            ndx = 0;
+            SerRXidx = 0;
+            SerRXmax = 0;
+            resetSer();
+          } else {
+            //SerRXidx++;
+            txBuffer[SerRXidx++] = t;
+          }
+        } else {
+          minb[0] = c;
+          ndx = 1;
+        }
+        if (SerRXidx >= SerRXmax && SerRXmax) {
+          ndx = 0;
+
+          byte len = preparePayloadFromSerial(SerRXmax);
+          while (!doTransmit(len, SendVersion));
+          SERIAL_CMD.println(F("OK"));
           SerRXidx = 0;
           SerRXmax = 0;
           resetSer();
-        } else {
-          SerRXidx++;
-          txBuffer[SerRXidx] = t;
         }
-      } else {
-        minb[0] = c;
-        ndx = 1;
-      }
-      if (SerRXidx >= SerRXmax && SerRXmax) {
-        ndx = 0;
-        
-        byte len = preparePayloadFromSerial(SerRXmax);
-        while (!doTransmit(len, SendVersion));
-        SERIAL_CMD.println(F("OK"));
-        SerRXidx=0;
-        SerRXmax=0;
-        resetSer();
       }
     } else {
-      
+
       if (c != endMarker && c != endMarker2) {
         serBuffer[SerRXidx] = c;
         SerRXidx++;
         if (SerRXidx >= MAX_SER_LEN) {
           SerRXidx = 0;
-    SerRXmax = 0;
-          SERIAL_CMD.println(F("ERROR 1"));
+          SerRXmax = 0;
+          //SERIAL_CMD.println(F("ERROR 1"));
           resetSer();
         }
       } else {
@@ -190,22 +192,21 @@ void processSerial() {
           serBuffer[SerRXidx] = '\0'; // terminate the string
           SerRXidx = 0;
           SerRXmax = checkCommand();
-          if (SerRXmax==255 ) {//error condition
-            SerRXmax=0;
-            SerRXidx=0;
-            SERIAL_CMD.println(F("ERROR 2"));
-            SERIAL_CMD.println(serBuffer);
+          if (SerRXmax == 255 ) { //error condition
+            SerRXmax = 0;
+            SerRXidx = 0;
+            //SERIAL_CMD.println(F("ERROR 2"));
+            //SERIAL_CMD.println(serBuffer);
             resetSer();
           }
         }
       }
     }
-    if (c != endMarker && c != endMarker2){
+    if (c != endMarker && c != endMarker2) {
       lastSer = millis();
     }
   }
   if (millis() - lastSer > 10000 && lastSer) {
-    SERIAL_CMD.println(F("ERROR 3"));
     SerRXidx = 0;
     SerRXmax = 0;
     resetSer();
@@ -213,6 +214,12 @@ void processSerial() {
 }
 
 byte preparePayloadFromSerial(byte rcvlen) {
+  Serial.println(txBuffer[0], HEX);
+  Serial.println(txBuffer[1], HEX);
+  Serial.println(txBuffer[2], HEX);
+  Serial.println(txBuffer[3], HEX);
+  Serial.println(txBuffer[4], HEX);
+  Serial.println(txBuffer[5], HEX);
   txBuffer[0] = (txBuffer[0] & 0x3F);
   if (rcvlen > 4) {
     txBuffer[0] = txBuffer[0] | (rcvlen == 7 ? 0x40 : (rcvlen == 15 ? 0x80 : 0xC0));
@@ -238,9 +245,9 @@ byte checkCommand() {
   } else if (strcmp_P (serBuffer, ATSENDVQ) == 0) {
     SERIAL_CMD.println(SendVersion);
   } else if (strcmp_P (serBuffer, ATSENDV1) == 0) {
-    SendVersion=1;
+    SendVersion = 1;
   } else if (strcmp_P (serBuffer, ATSENDV2) == 0) {
-    SendVersion=2;
+    SendVersion = 2;
   } else if (strcmp_P (serBuffer, ATADR) == 0) {
     paramlen = 1;
   } else if (strcmp_P (serBuffer, ATVERS) == 0) {
@@ -262,7 +269,7 @@ void resetSer() {
 }
 
 void outputPacket(byte rlen) { //format of rlen: what is passed back from handleReceive(), first 2 bits are version-1, last 6 are length in bytes
-  
+
   byte vers = (rlen & 196) >> 6;
   rlen &= 0x3F;
   if (vers == 0) { //version 1
@@ -270,11 +277,11 @@ void outputPacket(byte rlen) { //format of rlen: what is passed back from handle
   } else {
     SERIAL_CMD.print('=');
   }
-  for (byte i = 0; i < (rlen-1); i++) {
+  for (byte i = 0; i < (rlen - 1); i++) {
     showHex(recvMessage[i], 1);
   }
   if (rlen == 4) {
-      showHex(recvMessage[3] >> 4, 1);
+    showHex(recvMessage[3] >> 4, 1);
   }
   SERIAL_CMD.println();
 }
@@ -301,39 +308,40 @@ byte handleReceive() {
   if (gotMessage) {
     byte vers = checkCSC(); //checkCSC() gives 0 on failed CSC, 1 on v1 structure (ACD...), 2 on v2 structure (DSCD...)
     if (!vers) { //if vers=0, unknown format ot bad CSC
+      //Serial.println("RES1");
       resetReceive();
-  Serial.println("RST1");
       return 0;
     }
-    if (recvMessage[0]==0 &&  recvMessage[1]==0 && recvMessage[2]==0 && (recvMessage[3]&0xF0)==0) {
-      for (byte i = 0;i<256;i++){
-        Serial.print(bitlen[i]);
-        Serial.print(',');
-      }
+    if (rxBuffer[0] == 0 &&  rxBuffer[1] == 0 && rxBuffer[2] == 0 && (rxBuffer[3] & 0xF0) == 0) {
+      //Serial.println("RES2");
       resetReceive();
-  Serial.println("RST2");
       return 0;
     }
     if (!isForMe()) { //matches on MyAddress==0, destination address==0, destination address==MyAddress.
+      //Serial.println("RES3");
       resetReceive();
-  Serial.println("RST3");
       return 0;
     }
     if (lastPacketSig == getPacketSig() && lastPacketTime) {
-      
-    lastPacketTime = millis();
+
+      lastPacketTime = millis();
       resetReceive();
       return 0;
     }
     lastPacketSig = getPacketSig();
     lastPacketTime = millis();
     byte rlen = ((pktLength >> 3) + 1) | ((vers - 1) << 6);
-    
+
     memcpy(recvMessage, rxBuffer, 32);
+    if (rlen == 4) {
+      recvMessage[3] = recvMessage[3] & 0xF0;
+    } else {
+      recvMessage[rlen - 1] = 0;
+    }
     resetReceive();
     return rlen;
   } else {
-    unsigned long t=(millis()-lastPacketTime);
+    unsigned long t = (millis() - lastPacketTime);
     if (lastPacketTime && (t > commandForgetTime)) {
       lastPacketTime = 0;
       lastPacketSig = 0;
@@ -347,12 +355,13 @@ void resetReceive() {
   bitnum = 0;
   memset(rxBuffer, 0, 32);
   gotMessage = 0;
-  #ifdef TCB1
-  TCB1.INTCTRL=0x01;
-  #else
+#ifdef TCB1
+  TCB1.INTCTRL = 0x01;
+#elif defined(TCB0)
+  TCB0.INTCTRL = 0x01;
+#else
   TIMSK1 = 1 << ICIE1;
-  #endif
-  memset(bitlen,0,512);
+#endif
   return;
 }
 
@@ -361,7 +370,7 @@ byte checkCSC() {
   byte rxchecksum2 = 0;
   for (byte i = 0; i < pktLength >> 3; i++) {
     rxchecksum = rxchecksum ^ rxBuffer[i];
-    rxchecksum2 = _crc8_ccitt_update(rxchecksum2,rxBuffer[i]);
+    rxchecksum2 = _crc8_ccitt_update(rxchecksum2, rxBuffer[i]);
   }
   if (pktLength >> 3 == 3) {
     rxchecksum = (rxchecksum & 0x0F) ^ (rxchecksum >> 4) ^ ((rxBuffer[3] & 0xF0) >> 4);
@@ -383,7 +392,7 @@ byte isForMe() {
 
 unsigned long getPacketSig() {
   byte len = pktLength >> 3;
-  unsigned long lastpacketsig=0;
+  unsigned long lastpacketsig = 0;
   for (byte i = (len == 3 ? 0 : 1); i < (len == 3 ? 3 : 4); i++) {
     lastpacketsig += rxBuffer[i];
     lastpacketsig = lastpacketsig << 8;
@@ -393,7 +402,7 @@ unsigned long getPacketSig() {
 }
 
 void setupTimer() {
-  #if defined(TCCR1A) && defined(TIMSK1) //In this case, it's a classic AVR with a normal timer1
+#if defined(TCCR1A) && defined(TIMSK1) //In this case, it's a classic AVR with a normal timer1
   TCCR1A = 0;
   TCCR1B = 0;
   TIFR1 = bit (ICF1) | bit (TOV1);  // clear flags so we don't get a bogus interrupt
@@ -402,48 +411,67 @@ void setupTimer() {
   // start Timer 1, prescalar of 8, edge select on falling edge
   TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
   //ready to rock and roll
-  #elif defined(TCB1) // it's a megaavr - (this was defined above)
-  TCB1.CTRLA=0x02; //disable, CKPER/2 clock source.
-  TCB1.CTRLB=0x03; //Input Capture Frequency Measurement mode
-  TCB1.INTFLAGS=1; //clear flag
-  TCB1.CNT=0; //count to 0
-  TCB1.INTCTRL=0x01;
-  EVSYS.ASYNCCH0=0x0B; //PA1 Set event channel for PA1 pin
-  EVSYS.ASYNCUSER11=0x03;
-  TCB1.EVCTRL=0x51; //filter, falling edge, ICIE=1
-  TCB1.CTRLA=0x03; //enable
-  #else
-  #error "architecture not supported"
-  #endif
+#elif defined(TCB1) // it's a megaavr
+  TCB1.CTRLA = 0x02; //disable, CKPER/2 clock source.
+  TCB1.CTRLB = 0x03; //Input Capture Frequency Measurement mode
+  TCB1.INTFLAGS = 1; //clear flag
+  TCB1.CNT = 0; //count to 0
+  TCB1.INTCTRL = 0x01;
+  EVSYS.ASYNCCH0 = RX_ASYNC0; //PA1 Set event channel for PA1 pin
+  EVSYS.ASYNCUSER11 = 0x03;
+  TCB1.EVCTRL = 0x51; //filter, falling edge, ICIE=1
+  TCB1.CTRLA = 0x03; //enable
+#elif defined(TCB0) // it's a megaavr
+  TCB0.CTRLA = 0x02; //disable, CKPER/2 clock source.
+  TCB0.CTRLB = 0x03; //Input Capture Frequency Measurement mode
+  TCB0.INTFLAGS = 1; //clear flag
+  TCB0.CNT = 0; //count to 0
+  TCB0.INTCTRL = 0x01;
+  EVSYS.ASYNCCH0 = RX_ASYNC0; //PA1 Set event channel for PA1 pin
+  EVSYS.ASYNCUSER0 = 0x03;
+  TCB0.EVCTRL = 0x51; //filter, falling edge, ICIE=1
+  TCB0.CTRLA = 0x03; //enable
+#else
+#error "architecture not supported"
+#endif
 }
 
 #ifdef TCB1
 ISR(TCB1_INT_vect)
+#elif defined(TCB0)
+ISR(TCB0_INT_vect)
 #else
 ISR (TIMER1_CAPT_vect)
 #endif
 {
+#if defined(TCB1)
   static unsigned long lasttime = 0;
-  #ifdef TCB1
   unsigned int newTime = TCB1.CCMP; //immediately get the ICR value
-  #else
+#elif defined(TCB0)
+  static unsigned long lasttime = 0;
+  unsigned int newTime = TCB0.CCMP; //immediately get the ICR value
+#else
   unsigned int newTime = ICR1; //immediately get the ICR value
-  #endif
+#endif
   byte state = (RX_PIN_STATE);
-  #ifdef TCB1
-  TCB1.EVCTRL=state?0x51:0x41; //trigger on falling edge if pin is high, otherwise rising edge
-  #else
+#ifdef TCB1
+  TCB1.EVCTRL = state ? 0x51 : 0x41; //trigger on falling edge if pin is high, otherwise rising edge
+  unsigned int duration = newTime;
+#elif defined(TCB0)
+  TCB0.EVCTRL = state ? 0x51 : 0x41; //trigger on falling edge if pin is high, otherwise rising edge
+  unsigned int duration = newTime;
+#else
   TCCR1B = state ? (1 << CS11 | 1 << ICNC1) : (1 << CS11 | 1 << ICNC1 | 1 << ICES1); //and set edge
-  #endif
   unsigned int duration = newTime - lasttime;
+#endif
   lasttime = newTime;
   if (state) {
     if (receiving) {
       if (duration > rxLowMax) {
+
         receiving = 0;
         bitnum = 0; // reset to bit zero
         memset(rxBuffer, 0, 32); //clear buffer
-        memset(bitlen,0,512);
       }
     } else {
       if (duration > rxSyncMin && duration < rxSyncMax) {
@@ -452,7 +480,6 @@ ISR (TIMER1_CAPT_vect)
     }
   } else {
     if (receiving) {
-      bitlen[bitnum]=duration;
       if (duration > rxZeroMin && duration < rxZeroMax) {
         dataIn = dataIn << 1;
       } else if (duration > rxOneMin && duration < rxOneMax) {
@@ -475,11 +502,13 @@ ISR (TIMER1_CAPT_vect)
         bitnum = 0;
         receiving = 0;
         gotMessage = 1;
-        #ifdef TCB1
-        TCB1.INTCTRL=0x00;
-        #else
+#ifdef TCB1
+        TCB1.INTCTRL = 0x00;
+#elif defined(TCB0)
+        TCB0.INTCTRL = 0x00;
+#else
         TIMSK1 = 0; //turn off input capture;
-        #endif
+#endif
       } else {
         bitnum++;
       }
@@ -491,11 +520,13 @@ ISR (TIMER1_CAPT_vect)
 
 byte doTransmit(byte len, byte vers) {
   if (!(receiving || lastPacketTime)) {
-    #ifdef TCB1
-    TCB1.INTCTRL=0x00;
-    #else
+#ifdef TCB1
+    TCB1.INTCTRL = 0x00;
+#elif defined(TCB0)
+    TCB0.INTCTRL = 0x00;
+#else
     TIMSK1 = 0;
-    #endif
+#endif
 #ifdef LED_TX
     digitalWrite(LED_TX, TX_LED_ON);
 #endif
@@ -504,7 +535,7 @@ byte doTransmit(byte len, byte vers) {
     byte txchecksum2 = 0;
     for (byte i = 0; i < len - 1; i++) {
       txchecksum = txchecksum ^ txBuffer[i];
-      txchecksum2 = _crc8_ccitt_update(txchecksum2,txBuffer[i]);
+      txchecksum2 = _crc8_ccitt_update(txchecksum2, txBuffer[i]);
     }
     if (len == 4) {
       txchecksum = (txchecksum & 0x0F) ^ (txchecksum >> 4) ^ ((txBuffer[3] & 0xF0) >> 4);
@@ -548,12 +579,14 @@ byte doTransmit(byte len, byte vers) {
     }
 #ifdef LED_TX
     digitalWrite(LED_TX, TX_LED_OFF);
-#endif  
-    #ifdef TCB1
-    TCB1.INTCTRL=0x01;
-    #else
+#endif
+#ifdef TCB1
+    TCB1.INTCTRL = 0x01;
+#elif defined(TCB0)
+    TCB0.INTCTRL = 0x01;
+#else
     TIMSK1 = 1 << ICIE1;
-    #endif
+#endif
     return 1;
   } else {
     return 0;
