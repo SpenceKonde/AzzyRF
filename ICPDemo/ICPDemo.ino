@@ -37,6 +37,15 @@ char * pEnd; //dummy pointer for strtol
 #define SERIAL_CMD Serial
 #endif
 
+#if defined(__AVR_ATtinyx14__) || defined(__AVR_ATtinyx04__)
+#define RX_PIN_STATE (VPORTA.IN&8) //RX on pin A3 for input capture.  pin 10
+#define RX_ASYNC0 0x0D
+#define TX_PIN 3
+#define txPIN VPORTA.IN
+#define txBV 128
+#define SERIAL_CMD Serial
+#endif
+
 //Configuration
 
 byte MyAddress = 0;
