@@ -11,12 +11,12 @@
 //#define LED5 4
 //#define LED_ON 1
 //#define LED_OFF 0
-#define BUTTON_1 10
-#define BUTTON_2 7
-#define BUTTON_3 6
-#define BUTTON_4 5 
-#define BUTTON_5 4 
-#define BUTTON_6 3 
+#define BUTTON_1 10 //PA0
+#define BUTTON_2 7  //PA3
+#define BUTTON_3 6  //PA4
+#define BUTTON_4 5  //PA5
+#define BUTTON_5 4  //PA6
+#define BUTTON_6 3  //PA7
 
 #define PCMSK0_SLEEP 0xF9 //0b11111001
 
@@ -35,16 +35,13 @@ unsigned int txSyncTime  = 2000;
 unsigned int txTrainLen  = 200;
 byte txTrainRep  = 20;
 
-const byte commands[][4] = {
-  
-  {0x1E,0x40,0xFF,0x00}, //Pin 0, PA6
-  {0x1E,0x40,0xFF,0x10}, //pin 1, PA7
-  {0x1E,0x40,0xFF,0x20}, //pin 2, PA1
-  {0x1E,0x41,0xFF,0x10}, //Same as tower light, but on distinct signal
-  {0x1E,0x40,0x00,0x00}, //Pin 0, PA6, off.
-  {0x1E,0x40,0x00,0x10}, //Pin 1, PA7, off.
-  {0x1E,0x40,0x00,0x20}, //Pin 2, PA1, off.
-  {0x1F,0x1E,0x02,0x00} //legacy tower light signal
+const byte commands[][12] PROGMEM={ 
+  {2,   5,  15, 7, 0,1,200,4,50, 15,0,2},
+  {2,   4,  0,  6, 0,1,100,4,25, 25,0,0},
+  {1,   6,  31, 5, 0,1,050,4,0,  22,0,1},
+  {4,   4,  150,4, 0,0,200,3,250,10,1,0},
+  {5,   4  ,50, 8, 0,0,100,3,225,5,12,3},
+  {0xf1,130,50, 10,0,0,50 ,3,200,0,66,9}
 };
 /*
 unsigned int rxSyncMin  = 1750;
@@ -113,27 +110,12 @@ byte getBtnst() {
 
 
 void loop() {
-  //btnst=(~PINB)&0x0F;
   byte btnst = getBtnst();
+  static byte lastst=0;
   if (btnst) {
-    byte vers=1;
-    Serial.println(btnst);
-    if (btnst == 1 ) {
-      preparePayload(0);
-    } else if (btnst == 2) {
-      preparePayload(4);
-    } else if (btnst == 4) {
-      preparePayload(1);
-    } else if (btnst == 8) {
-      preparePayload(5);
-    } else if (btnst ==16){
-      preparePayload(3);
-    } else if (btnst ==32){
-      preparePayload(7);
-    }
-    doTransmit(10,TXLength,vers);
+    
   }
-  delay(50);
+
   if (!btnst) { //make sure all the buttons are not pressed, otherwise skip sleep and send the signal again
     PCMSK0 = PCMSK0_SLEEP;
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -149,12 +131,84 @@ void loop() {
   }
 }
 
-void preparePayload(byte cmd) {
-  txrxbuffer[0] = commands[cmd][0];
-  txrxbuffer[1] = commands[cmd][1];
-  txrxbuffer[2] = commands[cmd][2];
-  txrxbuffer[3] = commands[cmd][3]&0xF0;
+void preparePayload(byte btn,byte rover) {
+  byte plen = txrxbuffer[0] >> 6;
+  plen = 4 << plen;
+  txrxbuffer[0] = mytarget;
+  txrxbuffer[1] = 0x55;
+  txrxbuffer[2] = ((myid & 0x0F) << 4) + btn;
+  txrxbuffer[3] = (rover?0x50:0x20);
   TXLength = 4;
+}
+void preparePayload8(byte btn,byte rover) {
+  byte plen = txrxbuffer[0] >> 6;
+  plen = 4 << plen;
+  txrxbuffer[0] = 64|mytarget;
+  txrxbuffer[1] = 0x55;
+  txrxbuffer[2] = ((myid & 0x0F) << 4) + btn;
+  txrxbuffer[3] = (rover?0x50:0x20);
+  txrxbuffer[4] = 0x54;
+  txrxbuffer[5] = 0x55;
+  txrxbuffer[6] = 0x56;
+  
+  TXLength = 8;
+}
+void preparePayload16(byte btn,byte notused) {
+  if (btn > 5) btn=5;
+  txrxbuffer[0] = 128|mytarget;
+  txrxbuffer[1] = 226;
+  txrxbuffer[2] = 0x31;
+  txrxbuffer[3] = pgm_read_byte_near(&commands[btn][0]);
+  txrxbuffer[4] = pgm_read_byte_near(&commands[btn][1]);
+  txrxbuffer[5] = pgm_read_byte_near(&commands[btn][2]);
+  txrxbuffer[6] = pgm_read_byte_near(&commands[btn][3]);
+  txrxbuffer[7] = pgm_read_byte_near(&commands[btn][4]);
+  txrxbuffer[8] = pgm_read_byte_near(&commands[btn][5]);
+  txrxbuffer[9] = pgm_read_byte_near(&commands[btn][6]);
+  txrxbuffer[10] = pgm_read_byte_near(&commands[btn][7]);
+  txrxbuffer[11] = pgm_read_byte_near(&commands[btn][8]);
+  txrxbuffer[12] = pgm_read_byte_near(&commands[btn][9]);
+  txrxbuffer[13] = pgm_read_byte_near(&commands[btn][10]);
+  txrxbuffer[14] = pgm_read_byte_near(&commands[btn][11]);
+  TXLength = 16;
+}
+void preparePayload32(byte btn,byte rover) {
+  byte plen = txrxbuffer[0] >> 6;
+  plen = 4 << plen;
+  txrxbuffer[0] = 128|64|mytarget;
+  txrxbuffer[1] = 0x55;
+  txrxbuffer[2] = ((myid & 0x0F) << 4) + btn;
+  txrxbuffer[3] = (rover?0x50:0x20);
+  txrxbuffer[4] = 0x54;
+  txrxbuffer[5] = 0x55;
+  txrxbuffer[6] = 0x56;
+  txrxbuffer[7] = 0x54;
+  txrxbuffer[8] = 0x55;
+  txrxbuffer[9] = 0x56;
+  txrxbuffer[10] = 0x54;
+  txrxbuffer[11] = 0x55;
+  txrxbuffer[12] = 0x56;
+  txrxbuffer[13] = 0x54;
+  txrxbuffer[14] = 0x55;
+  txrxbuffer[15] = 0x55;
+  txrxbuffer[16] = 0x55;
+  txrxbuffer[17] = 0x55;
+  txrxbuffer[18] = 0x55;
+  txrxbuffer[19] = 0x55;
+  txrxbuffer[20] = 0x10;
+  txrxbuffer[21] = 0x25;
+  txrxbuffer[22] = 0xFF;
+  txrxbuffer[23] = 0x57;
+  txrxbuffer[24] = 0x55;
+  txrxbuffer[25] = 0x0F;
+  txrxbuffer[26] = 0xF0;
+  txrxbuffer[27] = 0x55;
+  txrxbuffer[28] = 0x55;
+  txrxbuffer[29] = 0x55;
+  txrxbuffer[30] = 0x55;
+  txrxbuffer[31] = 0x55;
+  
+  TXLength = 32;
 }
 
 

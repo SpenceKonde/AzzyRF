@@ -40,9 +40,9 @@ char * pEnd; //dummy pointer for strtol
 #if defined(__AVR_ATtinyx14__) || defined(__AVR_ATtinyx04__)
 #define RX_PIN_STATE (VPORTA.IN&8) //RX on pin A3 for input capture.  pin 10
 #define RX_ASYNC0 0x0D
-#define TX_PIN 3
+#define TX_PIN 0
 #define txPIN VPORTA.IN
-#define txBV 128
+#define txBV 16
 #define SERIAL_CMD Serial
 #endif
 
