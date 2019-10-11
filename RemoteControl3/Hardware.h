@@ -1,3 +1,4 @@
+//This file contains stuff that is specific to the hardware in use - sleep, the pins that buttons use, and so on. 
 
 #define BUTTON_1 10 //PA0
 #define BUTTON_2 7  //PA3
