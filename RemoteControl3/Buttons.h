@@ -6,6 +6,9 @@
 #define BUTTON_5 4  //PA6
 #define BUTTON_6 3  //PA7
 
+#define PCMSK0_SLEEP 0xF9 //0b11111001
+//#define PCMSK1_SLEEP //use this if other ports are used.
+
 void setupButtons(){
   pinMode(BUTTON_1, INPUT_PULLUP);
   pinMode(BUTTON_2, INPUT_PULLUP);
