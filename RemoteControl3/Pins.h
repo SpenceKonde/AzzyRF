@@ -18,6 +18,19 @@ void setupButtons(){
   pinMode(BUTTON_6, INPUT_PULLUP);
 }
 
+void setupInterrupts(){
+  GIMSK |= 1 << PCIE0; //enable PCINT on port A
+  PCMSK0 = 0;
+}
+
+void enterSleep() {
+  PCMSK0 = PCMSK0_SLEEP;
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
+  sleep_mode();
+  sleep_disable();
+}
+
 byte getButtonState() {
   byte retval=0;
   retval+=digitalRead(BUTTON_1); //pin1
