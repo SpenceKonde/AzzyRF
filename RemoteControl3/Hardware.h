@@ -2,6 +2,11 @@
 #include <avr/sleep.h>
 #include <avr/power.h>
 
+//This code is for the counterclockwise pinout of the attiny841. 
+#ifndef OLD_PINOUT
+#error "Wrong pinout selected!"
+#endif
+
 #define BUTTON_1 10 //PA0
 #define BUTTON_2 7  //PA3
 #define BUTTON_3 6  //PA4
