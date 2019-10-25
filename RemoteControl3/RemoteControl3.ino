@@ -2,7 +2,8 @@
 #include <avr/power.h>
 #include <util/crc16.h>
 #include "AzzyRFTX.h"
-#include "Buttons.h"
+#include "Commands.h"
+#include "Hardware.h"
 
 
 #define PCMSK0_SLEEP 0xF9 //0b11111001
