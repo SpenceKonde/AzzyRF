@@ -49,3 +49,11 @@ byte getButtonState() {
   retval+=digitalRead(BUTTON_6)<<5; //pin6
   return (~retval) & 0x3F;
 }
+
+
+ISR (PCINT0_vect) // handle pin change interrupt for D0 to D7 here
+{
+  PCMSK0 = 0; //disable the interrupts by masking it off.
+  sleeping = 0;
+}
+
