@@ -9,7 +9,6 @@
 
 
 byte sleeping = 0;
-byte btnst = 0;
 
 
 void setup() {
@@ -25,8 +24,41 @@ void setup() {
 void loop() {
   byte btnst = getButtonState();
   static byte lastst=0;
+  static unsigned long lastBtnTime=0;
+  
+  if (btnst != lastst) { //if the button state changes quickly, then that means people are pushing more buttons
+    lastBtnTime=millis();
+    lastst=btnst;
+  }
+  
+  if (btnst && millis()-lastBtnTime>500) {
+    //it's been long enough
+    doButtonAction(btnst);
+  }
+
+  if (!btnst) { //make sure all the buttons are not pressed, otherwise skip sleep and send the signal again
+    if (lastBtnState) {
+      doButtonAction(btnst);
+    }
+    btnst=0;
+    lastst=0;
+    lastBtnTime=0;
+    
+    PCMSK0 = PCMSK0_SLEEP;
+    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+    sleeping = 1;
+    sleep_enable();
+    //Serial.println("sleep enabled");
+    //delay(200);
+    sleep_mode();
+    //now we're sleeping....
+  
+    sleep_disable(); //execution will continue from here.
+    delay(60);
+  }
+}
+doButtonAction(byte btnst) {
   if (btnst) {
-    byte vers=1;
     if (btnst == 1 ) {
       sendPacket(0,1);
     } else if (btnst == 2) {
@@ -41,20 +73,6 @@ void loop() {
       sendPacket(7,1);
     }
   }
-
-  if (!btnst) { //make sure all the buttons are not pressed, otherwise skip sleep and send the signal again
-    PCMSK0 = PCMSK0_SLEEP;
-    set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-    sleeping = 1;
-    sleep_enable();
-    //Serial.println("sleep enabled");
-    //delay(200);
-    sleep_mode();
-    //now we're sleeping....
-  
-    sleep_disable(); //execution will continue from here.
-    delay(60);
-  }
 }
 
 ISR (PCINT0_vect) // handle pin change interrupt for D0 to D7 here
@@ -63,7 +81,3 @@ ISR (PCINT0_vect) // handle pin change interrupt for D0 to D7 here
   sleeping = 0;
 }
 
-
-#ifndef OLD_PINOUT
-#error "Wrong pinout selected!"
-#endif
