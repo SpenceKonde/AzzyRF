@@ -6,9 +6,6 @@
 #include "Hardware.h"
 
 
-#define PCMSK0_SLEEP 0xF9 //0b11111001
-
-
 byte sleeping = 0;
 
 
@@ -74,11 +71,5 @@ doButtonAction(byte btnst) {
       sendPacket(7,1);
     }
   }
-}
-
-ISR (PCINT0_vect) // handle pin change interrupt for D0 to D7 here
-{
-  PCMSK0 = 0; //disable the interrupts by masking it off.
-  sleeping = 0;
 }
 
