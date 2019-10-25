@@ -1,3 +1,5 @@
+#include <avr/crc16.h>
+#include "AzzyRFRXPins.h"
 
 volatile byte receiving = 0;
 volatile byte bitnum = 0; //current bit received
