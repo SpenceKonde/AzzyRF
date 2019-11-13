@@ -1,17 +1,7 @@
 #include <util/crc16.h>
-
-
-
-
-
-//Configuration
+#include "AzzyRFRX.h"
 
 byte MyAddress = 0;
-
-
-
-
-// Commands:
 
 const byte commands[][4] = {
   {0x1E,0x40,0xFF,0x00}, //Pin 0, PA6
