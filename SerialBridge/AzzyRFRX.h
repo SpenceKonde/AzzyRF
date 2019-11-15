@@ -1,6 +1,8 @@
 #include "AzzyRFRXPinx.h"
 #include <util/crc16.h>
 
+#define AZZYRFRX_VERSION "RX v2.3.0"
+
 volatile byte receiving = 0;
 volatile byte bitnum = 0; //current bit received
 
