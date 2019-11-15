@@ -1,6 +1,8 @@
 #include "AzzyRFTXPins.h"
 #include <util/crc16.h>
 
+#define AZZYRFTX_VERSION "TX v2.3.0"
+
 const unsigned int txOneLength  = 500;
 const unsigned int txZeroLength  = 300;
 const unsigned int txSyncTime  = 2000;
