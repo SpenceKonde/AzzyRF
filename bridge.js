@@ -14,7 +14,7 @@ function startup() {
   Serial1.on('data', onSerial);
   
 }
-dateurl="http://drazzy.com/time.shtml";
+dateurl="http://raspi/date.php";
 var INTERVALS={"date":""}
 var clk;
 
