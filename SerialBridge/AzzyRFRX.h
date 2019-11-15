@@ -10,6 +10,9 @@ volatile byte pktLength = 31;
 unsigned long lastPacketTime = 0;
 unsigned long lastPacketSig = 0;
 
+
+byte recvMessage[32];
+
 // ##############
 // TIMING VALUES
 // ##############
