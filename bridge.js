@@ -1,5 +1,5 @@
 //for Espruino on ESP8266
-//Talks over serial to an Arduino running ICPDemo
+//Talks over serial to an Arduino running SerialBridge (formerly ICPDemo)
 //to send things over 433MHz RF
 
 
@@ -7,13 +7,24 @@ function startup() {
   setBusyIndicator(2);
   require("ESP8266").logDebug(0);
   require("ESP8266").setLog(0);
-  require("http").createServer(onPageRequest).listen(80);
+  setTimeout("getDate();INTERVALS.date=setInterval(getDate,1800000);",2000);
+  setTimeout('require("http").createServer(onPageRequest).listen(80);',5000);
   Telnet.setConsole(true);
   Serial1.setup(115200);
   Serial1.on('data', onSerial);
-
+  
 }
+dateurl="http://drazzy.com/time.shtml";
+var INTERVALS={"date":""}
+var clk;
 
+function getDate() {
+	var date="";
+	require("http").get(dateurl, function(res) {
+		res.on('data',function (data) {date+=data;});
+		res.on('close',function() {clk=new Clock(date);});
+	});
+}
 
 
 var http = require("http");
@@ -51,10 +62,18 @@ function handleCmd(pn,q,r) {
       return RFSend(q.message,32)?200:400;
     } else if (pn=="/lastrx.qry"){
       r.writeHead(200,CORS);
+      r.write('[');
       for (var i=0;i<LastRxValues.length;i++){
+        r.write('\r\n["');
+        r.write(LastRxTimes[i]);
+        r.write('","');
         r.write(LastRxValues[i]);
-        r.write("\r\n");
+        r.write('"]');
+        if (LastRxValues.length < i+1) {
+          r.write(',');
+        }
       }
+      r.write('\r\n]');
       return -1;
     } else {
       return 404;
@@ -98,6 +117,7 @@ rxlen=4;
 rxraw=new Uint8Array(32);
 rxrawidx=0;
 LastRxValues=[""];
+LastRxTimes=[""];
 incomingraw=new Uint8Array(32);
 
 function onSerial(data) {
@@ -143,7 +163,10 @@ function onSerial(data) {
 }
 
 function processReceive() {
-  if(LastRxValues.unshift((rcvvers==2?'=':'+')+rxdata)>=10){
+  if(LastRxValues.unshift((rcvvers==2?'=':'+')+rxdata)>=20){
+    LastRxValues.pop();
+  }
+  if(LastRxTimes.unshift(getDStr()+" "+getTStr(":"))>=20){
     LastRxValues.pop();
   }
   //console.log(rxdata);
@@ -213,3 +236,15 @@ function onInit() {
   setTimeout(startup,15000);
 }
 
+function getTStr(sep){
+	var hrs=clk.getDate().getHours();
+	var mins=clk.getDate().getMinutes();
+	return (hrs>9?hrs:" "+hrs)+sep+(mins>9?mins:"0"+mins);
+}
+
+function getDstr(){
+	var mon=clk.getDate().getMonth()+1;
+	var day=clk.getDate().getDate();
+	var year=clk.getDate().getFullYear();
+	return (mon+"/"+day+"/"+year);
+}
