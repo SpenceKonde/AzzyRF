@@ -1,4 +1,7 @@
-#include <util/crc16.h>
+#include "AzzyRFTX.h"
+#include "AzzyRFRX.h"
+
+#define SERIALBRIDGE_VERSION "2.0"
 
 unsigned long lastSer = 0;
 char * pEnd; //dummy pointer for strtol
@@ -6,62 +9,16 @@ char * pEnd; //dummy pointer for strtol
 
 unsigned long lastSendSig = 0;
 
-//if it's a megaavr, figure out which timer we use:
-
-
-//Microcontroller-specific
-//328p
-
-#ifdef __AVR_ATmega328P__
-
-#define RX_PIN_STATE (PINB&1) //RX on pin 8 for input capture. 
-#define TX_PIN 7
-#define txPIN PIND
-#define txBV 128
-#define SERIAL_CMD Serial
-//#define SERIAL_DBG Serial
-
-#endif
-
-#if defined(__AVR_ATtinyx16__) || defined(__AVR_ATtinyx06__)
-#define RX_PIN_STATE (VPORTA.IN&2) //RX on pin A1 for input capture.  pin 14
-#define RX_ASYNC0 0x0B
-#define TX_PIN 3
-#define txPIN VPORTA.IN
-#define txBV 128
-#define SERIAL_CMD Serial
-#endif
-
-#if defined(__AVR_ATtinyx14__) || defined(__AVR_ATtinyx04__)
-#define RX_PIN_STATE (VPORTA.IN&8) //RX on pin A3 for input capture.  pin 10
-#define RX_ASYNC0 0x0D
-#define TX_PIN 0
-#define txPIN VPORTA.IN
-#define txBV 16
-#define SERIAL_CMD Serial
-#endif
-
-//Configuration
-
 byte MyAddress = 0;
 
 
 //#define SERIAL_DBG Serial
 
 //Buffers
-byte txBuffer[32];
 byte recvMessage[32];
 #define MAX_SER_LEN 10
 char serBuffer[MAX_SER_LEN];
 
-
-const unsigned int txOneLength  = 500;
-const unsigned int txZeroLength  = 300;
-const unsigned int txSyncTime  = 2000;
-const unsigned int txTrainLen  = 200;
-const unsigned int txRepCount = 12;
-const unsigned int txRepDelay = 2000;
-const byte txTrainRep  = 30;
 const char endMarker = '\r';
 const char endMarker2 = '\n';
 byte SendVersion = 1;
@@ -83,7 +40,6 @@ const char ATVERS[] PROGMEM = {"AT+VERS"};
 
 void setup() {
   // put your setup code here, to run once:
-  pinMode(TX_PIN, OUTPUT);
   setupAzzyRFRX();
   setupAzzyRFTX();
   SERIAL_CMD.begin(115200);
@@ -162,8 +118,6 @@ void processSerial() {
           if (SerRXmax == 255 ) { //error condition
             SerRXmax = 0;
             SerRXidx = 0;
-            //SERIAL_CMD.println(F("ERROR 2"));
-            //SERIAL_CMD.println(serBuffer);
             resetSer();
           }
         }
@@ -181,12 +135,6 @@ void processSerial() {
 }
 
 byte preparePayloadFromSerial(byte rcvlen) {
-  Serial.println(txBuffer[0], HEX);
-  Serial.println(txBuffer[1], HEX);
-  Serial.println(txBuffer[2], HEX);
-  Serial.println(txBuffer[3], HEX);
-  Serial.println(txBuffer[4], HEX);
-  Serial.println(txBuffer[5], HEX);
   txBuffer[0] = (txBuffer[0] & 0x3F);
   if (rcvlen > 4) {
     txBuffer[0] = txBuffer[0] | (rcvlen == 7 ? 0x40 : (rcvlen == 15 ? 0x80 : 0xC0));
@@ -218,7 +166,9 @@ byte checkCommand() {
   } else if (strcmp_P (serBuffer, ATADR) == 0) {
     paramlen = 1;
   } else if (strcmp_P (serBuffer, ATVERS) == 0) {
-    SERIAL_CMD.println(F("AzzyRF v2.3"));
+    SERIAL_CMD.println(F(SERIALBRIDGE_VERSION));
+    SERIAL_CMD.println(F(AZZYRFTX_VERSION));
+    SERIAL_CMD.println(F(AZZYRFRX_VERSION));
   } else {
     return 255;
   }
@@ -227,6 +177,9 @@ byte checkCommand() {
   }
   return paramlen;
 }
+
+
+
 void resetSer() {
   if (lastSer) { //if we've gotten any characters since last reset, print newline to signify completion.
     lastSer = 0;
@@ -274,77 +227,4 @@ void showHex (const byte b, const byte c) {
 
 
 
-byte doTransmit(byte len, byte vers) {
-  if (!(receiving || lastPacketTime)) {
-#ifdef TCB1
-    TCB1.INTCTRL = 0x00;
-#elif defined(TCB0)
-    TCB0.INTCTRL = 0x00;
-#else
-    TIMSK1 = 0;
-#endif
-#ifdef LED_TX
-    digitalWrite(LED_TX, TX_LED_ON);
-#endif
-    digitalWrite(TX_PIN, LOW); // known state
-    byte txchecksum = 0;
-    byte txchecksum2 = 0;
-    for (byte i = 0; i < len - 1; i++) {
-      txchecksum = txchecksum ^ txBuffer[i];
-      txchecksum2 = _crc8_ccitt_update(txchecksum2, txBuffer[i]);
-    }
-    if (len == 4) {
-      txchecksum = (txchecksum & 0x0F) ^ (txchecksum >> 4) ^ ((txBuffer[3] & 0xF0) >> 4);
-      txchecksum2 = (txchecksum2 & 0x0F) ^ (txchecksum2 >> 4) ^ ((txBuffer[3] & 0xF0) >> 4);
-      if (txchecksum == txchecksum2)txchecksum2++;
-      txBuffer[3] = (txBuffer[3] & 0xF0) | 0x0F & (vers == 1 ? txchecksum : txchecksum2);
-    } else {
-      if (txchecksum == txchecksum2)txchecksum2++;
-      txBuffer[len - 1] = (vers == 1 ? txchecksum : txchecksum2);
-    }
 
-    for (byte r = 0; r < txRepCount; r++) {
-      for (byte j = 0; j <= 2 * txTrainRep; j++) {
-        delayMicroseconds(txTrainLen);
-        //digitalWrite(txpin, j & 1);
-        txPIN = txBV;
-      }
-      digitalWrite(TX_PIN, HIGH);
-      delayMicroseconds(txSyncTime);
-      txPIN = txBV;
-      delayMicroseconds(txSyncTime);
-      for (byte k = 0; k < len; k++) {
-        //send a byte
-        for (int m = 7; m >= 0; m--) {
-          txPIN = txBV;
-          if ((txBuffer[k] >> m) & 1) {
-            delayMicroseconds(txOneLength);
-            txPIN = txBV;
-            delayMicroseconds(txOneLength);
-          } else {
-            delayMicroseconds(txZeroLength);
-            txPIN = txBV;
-            delayMicroseconds(txZeroLength);
-          }
-        }
-        //done with that byte
-      }
-      //done with sending this packet;
-      digitalWrite(TX_PIN, LOW); //make sure it's off;
-      delayMicroseconds(txRepDelay); //wait before doing the next round.
-    }
-#ifdef LED_TX
-    digitalWrite(LED_TX, TX_LED_OFF);
-#endif
-#ifdef TCB1
-    TCB1.INTCTRL = 0x01;
-#elif defined(TCB0)
-    TCB0.INTCTRL = 0x01;
-#else
-    TIMSK1 = 1 << ICIE1;
-#endif
-    return 1;
-  } else {
-    return 0;
-  }
-}
