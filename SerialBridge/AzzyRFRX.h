@@ -151,7 +151,7 @@ unsigned long getPacketSig() {
   return lastpacketsig;
 }
 
-void setupTimer() {
+void setupAzzyRFRX() {
 #if defined(TCCR1A) && defined(TIMSK1) //In this case, it's a classic AVR with a normal timer1
   TCCR1A = 0;
   TCCR1B = 0;
