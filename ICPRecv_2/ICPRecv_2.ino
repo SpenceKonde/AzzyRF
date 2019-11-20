@@ -256,7 +256,7 @@ void setupTimer() {
   TCB1.INTFLAGS=1; //clear flag
   TCB1.CNT=0; //count to 0
   TCB1.INTCTRL=0x01;
-  EVSYS.ASYNCCH0=RX_ASYNC0 //PA1 Set event channel for PA1 pin
+  EVSYS.ASYNCCH0=RX_ASYNC0; //PA1 Set event channel for PA1 pin
   EVSYS.ASYNCUSER11=0x03;
   TCB1.EVCTRL=0x51; //filter, falling edge, ICIE=1
   TCB1.CTRLA=0x03; //enable
