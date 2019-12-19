@@ -17,9 +17,11 @@ const byte commands[][4] = {
 const byte portbv[3]={0x40,0x80,0x02};
 
 #define BRIGHTNESS_THRESHOLD 400 //out of 1024;
-#define LIGHT_DURATION 60000UL //duration of 
+#define LIGHT_DURATION 60000UL //duration for stair light to stay on, max
+#define RIG_DURATION 1000UL*60*60 //duration for rig to stay on, max
 
 unsigned long stairsOnAt=0;
+unsigned long rigOnAt=0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -46,6 +48,9 @@ void loop() {
           PORTA.OUTSET=portbv[1];
           stairsOnAt=millis();
         }
+      } else if (cmd == 2) {
+        PORTA.OUTSET=portbv[2];
+        rigOnAt=millis();
       } else if (cmd == 3) {
         PORTA.OUTSET=portbv[1];
         stairsOnAt=millis();
