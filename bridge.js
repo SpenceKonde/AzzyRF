@@ -2,6 +2,7 @@
 //Talks over serial to an Arduino running SerialBridge (formerly ICPDemo)
 //to send things over 433MHz RF
 
+var bridgeversion="AzzyRF WiFi Bridge v1.1";
 
 function startup() {
   setBusyIndicator(2);
@@ -12,11 +13,14 @@ function startup() {
   Telnet.setConsole(true);
   Serial1.setup(115200);
   Serial1.on('data', onSerial);
-  
+
 }
 dateurl="http://raspi/date.php";
-var INTERVALS={"date":""}
+var INTERVALS={"date":""};
 var clk;
+
+var ResetTimer=-1; //This stores the ID of the timeout that resets the receiving code.
+var KickTimer=-1;
 
 function getDate() {
 	var date="";
@@ -28,23 +32,28 @@ function getDate() {
 
 
 var http = require("http");
+var rhead={'Access-Control-Allow-Origin':'*', 'Connection':'close'};
+var khead={'Access-Control-Allow-Origin':'*', 'Connection':'close', 'Retry-After':'10'};
 
-
-
-var CORS={'Access-Control-Allow-Origin':'*'};
 // Network
 
 function onPageRequest(req, res) {
+  if (KickTimer!=-1) {
+    r.writeHead(503,khead);
+    res.write("Transciever reset in progress");
+    res.end();
+    return;
+  }
   var a = url.parse(req.url, true);
   var resu = handleCmd(a.pathname,a.query,res);
   if (resu == -1) {
     ; //do nothing
   } else if (resu) {
-    res.writeHead(resu,CORS);
+    res.writeHead(resu,rhead);
     if (resu==200) {res.write("OK");}
     else if (resu==404) {res.write("Not Found");}
   } else {
-    res.writeHead(500,CORS);
+    res.writeHead(500,rhead);
     res.write("ERROR");
   }
   res.end();
@@ -60,8 +69,17 @@ function handleCmd(pn,q,r) {
       return RFSend(q.message,16)?200:400;
     } else if (pn=="/send32.cmd") {
       return RFSend(q.message,32)?200:400;
+    } else if (pn=="/kick.cmd") {
+      r.writeHead(200,rhead);
+      r.write("Resetting transciever, wait 5 seconds");
+      kickTiny();
+      return -1;
+    } else if (pn=="/version.qry") {
+      r.writeHead(200,rhead);
+      r.write(bridgeversion);
+      return -1;
     } else if (pn=="/lastrx.qry"){
-      r.writeHead(200,CORS);
+      r.writeHead(200,rhead);
       r.write('[');
       for (var i=0;i<LastRxValues.length;i++){
         r.write('\r\n["');
@@ -106,6 +124,13 @@ function RFSend(message,len) {
     }
   Serial1.println(message);
   return 1;
+}
+
+function kickTiny(){
+  resetReceive();
+  digitalWrite(12,0);
+  setTimeout("digitalWrite(12,1);",50)
+  KickTimer=setTimeout("digitalWrite(12,1);resetReceive();KickTimer=0;",5000);
 }
 
 //Receive processing
@@ -154,9 +179,19 @@ function onSerial(data) {
       if (c=='='){
         rcvvers=2;
         rxing=1;
+        if (ResetTimer!=-1) {
+          clearTimeout(ResetTimer);
+          ResetTimer=-1;
+        }
+        resetTimer=setTimeout(resetReceive,1000);
       } else if (c=='+') {
         rcvvers=1;
         rxing=1;
+        if (ResetTimer!=-1) {
+          clearTimeout(ResetTimer);
+          ResetTimer=-1;
+        }
+        resetTimer=setTimeout(resetReceive,1000);
       }
     }
   }
@@ -208,14 +243,19 @@ function processReceive() {
 }
 
 function resetReceive() {
+  if (ResetTimer!=-1) {
+    clearTimeout(ResetTimer);
+    ResetTimer=-1;
+  }
   rxdata="";
   rxing=0;
   rcvvers=1;
   rxlen=4;
   rxrawidx=0;
   rxraw.fill(0);
-
 }
+
+
 
 RFCm = {
 };
@@ -227,12 +267,14 @@ RFCm = {
   "1F1E0200":"console.log('received 1F1E0202, either version')"
 };
 */
+
 RFCl = {
 };
 
 //onInit
 
 function onInit() {
+  digitalWrite(12,1);
   setTimeout(startup,15000);
 }
 
@@ -248,3 +290,4 @@ function getDstr(){
 	var year=clk.getDate().getFullYear();
 	return (mon+"/"+day+"/"+year);
 }
+
