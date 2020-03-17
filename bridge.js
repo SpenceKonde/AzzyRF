@@ -3,18 +3,21 @@
 //to send things over 433MHz RF
 
 var bridgeversion="AzzyRF WiFi Bridge v1.1";
+var Clock = require("clock").Clock;
+var heartbeatst=1;
 
 function startup() {
   setBusyIndicator(2);
   require("ESP8266").logDebug(0);
   require("ESP8266").setLog(0);
   setTimeout("getDate();INTERVALS.date=setInterval(getDate,1800000);",2000);
+  setTimeout('LastRxTimes=[getDStr()+" "+getTStr(":")];',4000);
   setTimeout('require("http").createServer(onPageRequest).listen(80);',5000);
   Telnet.setConsole(true);
   Serial1.setup(115200);
   Serial1.on('data', onSerial);
-
 }
+
 dateurl="http://raspi/date.php";
 var INTERVALS={"date":""};
 var clk;
@@ -23,11 +26,11 @@ var ResetTimer=-1; //This stores the ID of the timeout that resets the receiving
 var KickTimer=-1;
 
 function getDate() {
-	var date="";
-	require("http").get(dateurl, function(res) {
-		res.on('data',function (data) {date+=data;});
-		res.on('close',function() {clk=new Clock(date);});
-	});
+  var date="";
+  require("http").get(dateurl, function(res) {
+    res.on('data',function (data) {date+=data;});
+    res.on('close',function() {clk=new Clock(date);});
+  });
 }
 
 
@@ -38,8 +41,8 @@ var khead={'Access-Control-Allow-Origin':'*', 'Connection':'close', 'Retry-After
 // Network
 
 function onPageRequest(req, res) {
-  if (KickTimer!=-1) {
-    r.writeHead(503,khead);
+  if (KickTimer!=-1 ) {
+    res.writeHead(503,khead);
     res.write("Transciever reset in progress");
     res.end();
     return;
@@ -129,8 +132,8 @@ function RFSend(message,len) {
 function kickTiny(){
   resetReceive();
   digitalWrite(12,0);
-  setTimeout("digitalWrite(12,1);",50)
-  KickTimer=setTimeout("digitalWrite(12,1);resetReceive();KickTimer=0;",5000);
+  setTimeout("digitalWrite(12,1);",50);
+  KickTimer=setTimeout("digitalWrite(12,1);resetReceive();KickTimer=-1;",5000);
 }
 
 //Receive processing
@@ -141,8 +144,8 @@ rcvvers=1;
 rxlen=4;
 rxraw=new Uint8Array(32);
 rxrawidx=0;
-LastRxValues=[""];
-LastRxTimes=[""];
+LastRxValues=["REBOOT"];
+//LastRxTimes=[""]; //set in onInit();
 incomingraw=new Uint8Array(32);
 
 function onSerial(data) {
@@ -198,10 +201,10 @@ function onSerial(data) {
 }
 
 function processReceive() {
-  if(LastRxValues.unshift((rcvvers==2?'=':'+')+rxdata)>=20){
+  if(LastRxValues.unshift((rcvvers==2?'=':'+')+rxdata)>=10){
     LastRxValues.pop();
   }
-  if(LastRxTimes.unshift(getDStr()+" "+getTStr(":"))>=20){
+  if(LastRxTimes.unshift(getDStr()+" "+getTStr(":"))>=10){
     LastRxValues.pop();
   }
   //console.log(rxdata);
@@ -271,23 +274,25 @@ RFCm = {
 RFCl = {
 };
 
+function getTStr(sep){
+  var hrs=clk.getDate().getHours();
+  var mins=clk.getDate().getMinutes();
+  var secs=clk.getDate().getSeconds();
+  return (hrs>9?hrs:" "+hrs)+sep+(mins>9?mins:"0"+mins)+sep+(secs>9?secs:"0"+secs);
+}
+
+function getDStr(){
+  var mon=clk.getDate().getMonth()+1;
+  var day=clk.getDate().getDate();
+  var year=clk.getDate().getFullYear();
+  return (mon+"/"+day+"/"+year);
+}
 //onInit
 
 function onInit() {
-  digitalWrite(12,1);
+  digitalWrite(12,0);
+  setTimeout("digitalWrite(12,1);",50);
+  digitalWrite(13,1);
   setTimeout(startup,15000);
+  setInterval("digitalWrite(13,(heartbeatst?0:1));heartbeatst=heartbeatst^1;",2500);
 }
-
-function getTStr(sep){
-	var hrs=clk.getDate().getHours();
-	var mins=clk.getDate().getMinutes();
-	return (hrs>9?hrs:" "+hrs)+sep+(mins>9?mins:"0"+mins);
-}
-
-function getDstr(){
-	var mon=clk.getDate().getMonth()+1;
-	var day=clk.getDate().getDate();
-	var year=clk.getDate().getFullYear();
-	return (mon+"/"+day+"/"+year);
-}
-

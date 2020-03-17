@@ -11,9 +11,6 @@ unsigned long lastSendSig = 0;
 unsigned long lastSer = 0;
 char * pEnd; //dummy pointer for strtol
 
-//if it's a megaavr, figure out which timer we use:
-
-
 //Microcontroller-specific
 //328p
 
@@ -25,7 +22,6 @@ char * pEnd; //dummy pointer for strtol
 #define txBV 128
 #define SERIAL_CMD Serial
 //#define SERIAL_DBG Serial
-
 #endif
 
 #if defined(__AVR_ATtinyx16__) || defined(__AVR_ATtinyx06__)
@@ -35,6 +31,11 @@ char * pEnd; //dummy pointer for strtol
 #define txPIN VPORTA.IN
 #define txBV 128
 #define SERIAL_CMD Serial
+#define ERSATZRESETPINCTRL PORTA.PIN6CTRL //uses PA6 - pin 2
+#define ERSATZRESETPINPORT PORTA
+#define ERSATZRESETPINBIT 1<<6
+#define ERSATZRESETVECT PORTA_PORT_vect
+//#define USE_TCB0 //uncomment to use TCB0 even if TCB1 present
 #endif
 
 #if defined(__AVR_ATtinyx14__) || defined(__AVR_ATtinyx04__)
@@ -44,11 +45,28 @@ char * pEnd; //dummy pointer for strtol
 #define txPIN VPORTA.IN
 #define txBV 16
 #define SERIAL_CMD Serial
+#define ERSATZRESETPINCTRL PORTA.PIN6CTRL //uses PA6 - pin 2
+#define ERSATZRESETPINPORT PORTA
+#define ERSATZRESETPINBIT 1<<6
+#define ERSATZRESETVECT PORTA_PORT_vect
+//#define USE_TCB0 //uncomment to use TCB0 even if TCB1 present
 #endif
+
+#define VERSIONSTRING "AzzyRF Serial Bridge v1.1"
+
 
 //Configuration
 
+//startup value of address:
 byte MyAddress = 0;
+
+//Optionally, enable ersatz reset pin (does a software reset when LOW
+#define ERSATZRESET
+
+//if HEARTBEATPIN is defined,KICKPIN will be pulsed low when HEARTBEATPIN does not change state for 10 seconds.
+#define HEARTBEATPIN 1 //PA5
+#define KICKPIN 9 //PA2
+#define HEARTBEATLIMIT 10000 //milliseconds
 
 
 //#define SERIAL_DBG Serial
@@ -122,14 +140,23 @@ const char ATADRQ[] PROGMEM = {"AT+ADR?"};
 const char ATADR[] PROGMEM = {"AT+ADR"};
 const char ATVERS[] PROGMEM = {"AT+VERS"};
 
+//####################
+// Begin Serial Bridge
+//####################
+
 
 
 void setup() {
   // put your setup code here, to run once:
+  pinMode(LED_BUILTIN, OUTPUT); //LED is used to indicate reset
+  digitalWrite(LED_BUILTIN, HIGH);
   pinMode(TX_PIN, OUTPUT);
   setupTimer();
   SERIAL_CMD.begin(115200);
-  delay(1000);
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+  setupReset(); //this sets up ersatz reset pin - if enabled - otherwise it does nothing
   SERIAL_CMD.println("OK");
 }
 
@@ -140,6 +167,34 @@ void loop() {
     outputPacket(rlen);
   }
   processSerial();
+  #ifdef HEARTBEATPIN
+  static unsigned long heartbeattime=0;
+  static byte heartbeatstate=0;
+  byte heartbeat=digitalRead(HEARTBEATPIN);
+  if (heartbeat!=heartbeatstate) {
+    heartbeatstate=heartbeat;
+    heartbeattime=millis();
+  } else if (millis()-heartbeattime > HEARTBEATLIMIT) {
+    pinMode(KICKPIN,OUTPUT); //Set the pin as output, being never written otherwise, this will drive it low.
+    resetReceive();
+    resetSer();
+    Serial.flush();
+    delay(100);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(100);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(100);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+    digitalWrite(LED_BUILTIN, LOW);
+    pinMode(KICKPIN,INPUT); //release the kick pin.
+    heartbeattime=millis();
+  }
+  #endif
 }
 
 void processSerial() {
@@ -223,12 +278,12 @@ void processSerial() {
 }
 
 byte preparePayloadFromSerial(byte rcvlen) {
-  Serial.println(txBuffer[0], HEX);
-  Serial.println(txBuffer[1], HEX);
-  Serial.println(txBuffer[2], HEX);
-  Serial.println(txBuffer[3], HEX);
-  Serial.println(txBuffer[4], HEX);
-  Serial.println(txBuffer[5], HEX);
+  //Serial.println(txBuffer[0], HEX);
+  //Serial.println(txBuffer[1], HEX);
+  //Serial.println(txBuffer[2], HEX);
+  //Serial.println(txBuffer[3], HEX);
+  //Serial.println(txBuffer[4], HEX);
+  //Serial.println(txBuffer[5], HEX);
   txBuffer[0] = (txBuffer[0] & 0x3F);
   if (rcvlen > 4) {
     txBuffer[0] = txBuffer[0] | (rcvlen == 7 ? 0x40 : (rcvlen == 15 ? 0x80 : 0xC0));
@@ -260,7 +315,7 @@ byte checkCommand() {
   } else if (strcmp_P (serBuffer, ATADR) == 0) {
     paramlen = 1;
   } else if (strcmp_P (serBuffer, ATVERS) == 0) {
-    SERIAL_CMD.println(F("AzzyRF Serial Bridge v1.0"));
+    SERIAL_CMD.println(F(VERSIONSTRING));
   } else {
     return 255;
   }
@@ -313,6 +368,74 @@ void showHex (const byte b, const byte c) {
   }
 }
 
+void setupReady(byte ready) {
+#ifdef READYPIN_PORT
+#ifdef RSTCTRL //simple check for megaavr
+  if (ready) {
+    READYPIN_PORT.OUTSET = READYPIN_BIT; //set output HIGH before setting as output
+    READYPIN_PORT.DIRSET = READYPIN_BIT;
+  } else {
+    READYPIN_PORT.OUTCLR = READYPIN_BIT;
+  }
+#else
+  cli();
+  if (ready) {
+    READYPIN_PORT |= READYPIN_BIT; //set output HIGH before setting as output
+    READYPIN_DDR &= READYPIN_BIT;
+  } else {
+    READYPIN_PORT = READYPIN_BIT;
+  }
+  sei();
+#endif
+#endif
+}
+
+
+//Ersatz Reset Pin
+//for non-megaavr parts, this *requires* that a bootloader that is smart enough to reset the WDT after reset!
+
+
+#ifdef ERSATZRESET
+#ifdef RSTCTRL //it's a megaavr with software reset
+void setupReset() {
+  ERSATZRESETPINCTRL = 0x08; //turn on pullup
+  while(!((ERSATZRESETPINPORT.IN)&(ERSATZRESETPINBIT))); //wait for the pin to go high - yes, it is needed!
+  ERSATZRESETPINCTRL = 0x0D; //enable it
+
+}
+ISR(ERSATZRESETVECT) {
+  if(!((ERSATZRESETPINPORT.IN)&(ERSATZRESETPINBIT))) {
+     ERSATZRESETPINPORT.INTFLAGS=(ERSATZRESETPINBIT);
+  } else {
+    while(((ERSATZRESETPINPORT.IN)&(ERSATZRESETPINBIT)))
+    _PROTECTED_WRITE(RSTCTRL.SWRR, 1);
+  }
+}
+
+#else //if not, it's a classic AVR
+#include <avr/wdt.h>
+
+void setupReset() {
+  EIMSK |= 1; //enable INT0 interrupt - will now reset when this pin is low.
+}
+
+ISR(INT0_vect) {
+  wdt_enable(WDTO_15MS); //set up WDT for minimum timeout
+  while (1); //spin until reset
+}
+
+#endif
+#else //in this case, the function does nothing - just here so we can keep all the code in one place.
+void setupReset() {
+
+}
+#endif
+
+
+//#######################
+//AzzyRF code begins now
+//#######################
+
 byte handleReceive() {
   if (gotMessage) {
     byte vers = checkCSC(); //checkCSC() gives 0 on failed CSC, 1 on v1 structure (ACD...), 2 on v2 structure (DSCD...)
@@ -341,7 +464,7 @@ byte handleReceive() {
     lastPacketTime = millis();
     byte rlen = ((pktLength >> 3) + 1) | ((vers - 1) << 6);
 
-    memcpy(recvMessage, rxBuffer, 32);
+    memcpy(recvMessage, (const void*)rxBuffer, 32);
     if (rlen == 4) {
       recvMessage[3] = recvMessage[3] & 0xF0;
     } else {
@@ -362,7 +485,7 @@ byte handleReceive() {
 void resetReceive() {
 
   bitnum = 0;
-  memset(rxBuffer, 0, 32);
+  memset((void*)rxBuffer, 0, 32);
   gotMessage = 0;
 #ifdef TCB1
   TCB1.INTCTRL = 0x01;
@@ -420,7 +543,7 @@ void setupTimer() {
   // start Timer 1, prescalar of 8, edge select on falling edge
   TCCR1B =  ((F_CPU == 1000000L) ? (1 << CS10) : (1 << CS11)) | 1 << ICNC1; //prescalar 8 except at 1mhz, where we use prescalar of 1, noise cancler active
   //ready to rock and roll
-#elif defined(TCB1) // it's a megaavr
+#elif defined(TCB1) && !defined(USE_TCB0) // it's a megaavr
   TCB1.CTRLA = 0x02; //disable, CKPER/2 clock source.
   TCB1.CTRLB = 0x03; //Input Capture Frequency Measurement mode
   TCB1.INTFLAGS = 1; //clear flag
@@ -480,7 +603,7 @@ ISR (TIMER1_CAPT_vect)
 
         receiving = 0;
         bitnum = 0; // reset to bit zero
-        memset(rxBuffer, 0, 32); //clear buffer
+        memset((void*)rxBuffer, 0, 32); //clear buffer
       }
     } else {
       if (duration > rxSyncMin && duration < rxSyncMax) {
@@ -496,7 +619,7 @@ ISR (TIMER1_CAPT_vect)
       } else {
         receiving = 0;
         bitnum = 0; // reset to bit zero
-        memset(rxBuffer, 0, 32); //clear buffer
+        memset((void*)rxBuffer, 0, 32); //clear buffer
         return;
       }
       if ((bitnum & 7) == 7) {
